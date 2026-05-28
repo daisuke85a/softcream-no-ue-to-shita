@@ -118,7 +118,7 @@
   const PLAYER_FEET = GROUND_Y;
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
   const CONE_X_OFFSET = 52;       // cone opening center x (from body center)
-  const CATCH_TOL = 30;           // |piece.x - cone.x| < this -> catch
+  const CATCH_TOL = 36;           // |piece.x - cone.x| < this -> catch (= stack half-width)
   const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
   const HEAD_TOP_DY = 60;         // head top y (from feet), where hit registers
   const MIN_SPAWN_X = PLAYER_W / 2 + CONE_X_OFFSET - CATCH_TOL + 4; // keep leftmost pieces catchable
