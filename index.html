@@ -416,17 +416,9 @@
       // shading on the right
       ctx.fillStyle = color.dark;
       ctx.fillRect(x + Math.round(bw) - 3, y, 3, stripeH);
-      // highlight on left
-      if (color.name !== 'white') {
-        ctx.fillStyle = color.light;
-        ctx.fillRect(x, y, 2, stripeH);
-      }
-    }
-    // outline for white
-    if (color.name === 'white') {
-      ctx.fillStyle = '#888';
-      ctx.fillRect(Math.round(cx - w/2), bottomY - nStripes * stripeH, 1, nStripes * stripeH);
-      ctx.fillRect(Math.round(cx + w/2 - 1), bottomY - nStripes * stripeH, 1, nStripes * stripeH);
+      // highlight on left (subtle edge for white, light shade for others)
+      ctx.fillStyle = color.name === 'white' ? '#dddddd' : color.light;
+      ctx.fillRect(x, y, 2, stripeH);
     }
   }
 
