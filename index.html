@@ -247,8 +247,7 @@
   }
 
   function constrainPlayerTo(x) {
-    // Compute the contiguous free-column range around the player's current column,
-    // then clamp x accounting for player width so neither edge enters a blocked column.
+    // Pile-based: contiguous free-column range around the player's current column.
     let nx = Math.max(PLAYER_W / 2, Math.min(LW - PLAYER_W / 2, x));
     const blocked = c => piles[c] && piles[c].length > 0;
     const playerCol = colOfX(player.x);
@@ -256,8 +255,28 @@
     while (leftCol - 1 >= 0 && !blocked(leftCol - 1)) leftCol--;
     let rightCol = playerCol;
     while (rightCol + 1 < N_COLS && !blocked(rightCol + 1)) rightCol++;
-    const minX = leftCol * COL_W + PLAYER_W / 2;
-    const maxX = (rightCol + 1) * COL_W - PLAYER_W / 2;
+    let minX = leftCol * COL_W + PLAYER_W / 2;
+    let maxX = (rightCol + 1) * COL_W - PLAYER_W / 2;
+
+    // Side-collision with falling pieces: a piece overlapping the stack's
+    // vertical range and horizontally close to the stack freezes movement
+    // toward it (movement away is still allowed).
+    const structureTop = stackTopY();
+    const structureBottom = PLAYER_FEET - CONE_TOP_OFFSET;
+    const proposedStackX = nx + CONE_X_OFFSET;
+    for (const p of falling) {
+      if (p.pastHit) continue;
+      const pieceTop = p.y - PIECE_H / 2;
+      const pieceBottom = p.y + PIECE_H / 2;
+      if (pieceBottom < structureTop) continue;
+      if (pieceTop > structureBottom) continue;
+      const dx = p.x - proposedStackX;
+      if (Math.abs(dx) >= PIECE_W) continue;
+      if (dx > 0) maxX = Math.min(maxX, player.x);
+      else if (dx < 0) minX = Math.max(minX, player.x);
+    }
+
+    if (minX > maxX) return player.x;
     return Math.max(minX, Math.min(maxX, nx));
   }
 
