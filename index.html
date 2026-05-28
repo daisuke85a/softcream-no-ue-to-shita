@@ -133,9 +133,12 @@
 
   let state = 'title';
   let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs;
+  let pointerDir = 0;   // -1 / 0 / +1 from touch or mouse hold
+  let keyLeft = false;
+  let keyRight = false;
 
   function reset() {
-    player = { x: LW / 2, targetX: LW / 2 };
+    player = { x: LW / 2 };
     stack = []; // [{color, h}]
     falling = []; // [{x, y, color, vy}]
     piles = {}; // col idx -> [{color, age}] from bottom
@@ -146,8 +149,15 @@
     score = 0;
   }
 
+  function clearInput() {
+    pointerDir = 0;
+    keyLeft = false;
+    keyRight = false;
+  }
+
   function startGame() {
     reset();
+    clearInput();
     state = 'playing';
     overlay.classList.remove('show');
     lastTs = performance.now();
@@ -251,26 +261,47 @@
     return Math.max(minX, Math.min(maxX, nx));
   }
 
-  // Input
+  // Input: hold-to-move. Touch/click on left half -> move left; right half -> move right.
+  // Keyboard: ArrowLeft / ArrowRight.
   function eventToLogicalX(e) {
     const rect = canvas.getBoundingClientRect();
     const t = e.touches ? e.touches[0] : e;
-    const x = (t.clientX - rect.left) / rect.width * LW;
-    return x;
+    return (t.clientX - rect.left) / rect.width * LW;
   }
-
-  function onPointerMove(e) {
+  function dirFromX(x) {
+    return x < LW / 2 ? -1 : 1;
+  }
+  function onPointerDown(e) {
     if (state !== 'playing') return;
     e.preventDefault();
-    player.targetX = eventToLogicalX(e);
+    pointerDir = dirFromX(eventToLogicalX(e));
   }
-  canvas.addEventListener('touchstart', onPointerMove, { passive: false });
+  function onPointerMove(e) {
+    if (state !== 'playing' || pointerDir === 0) return;
+    e.preventDefault();
+    pointerDir = dirFromX(eventToLogicalX(e));
+  }
+  function onPointerUp(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    pointerDir = 0;
+  }
+  canvas.addEventListener('touchstart', onPointerDown, { passive: false });
   canvas.addEventListener('touchmove', onPointerMove, { passive: false });
-  canvas.addEventListener('mousedown', onPointerMove);
-  let mouseDown = false;
-  canvas.addEventListener('mousedown', () => mouseDown = true);
-  window.addEventListener('mouseup', () => mouseDown = false);
-  canvas.addEventListener('mousemove', e => { if (mouseDown) onPointerMove(e); });
+  canvas.addEventListener('touchend', onPointerUp, { passive: false });
+  canvas.addEventListener('touchcancel', onPointerUp, { passive: false });
+  canvas.addEventListener('mousedown', onPointerDown);
+  canvas.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('mouseup', onPointerUp);
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { keyLeft = true; e.preventDefault(); }
+    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { keyRight = true; e.preventDefault(); }
+  });
+  window.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keyLeft = false;
+    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keyRight = false;
+  });
+  window.addEventListener('blur', clearInput);
 
   startBtn.addEventListener('click', startGame);
 
@@ -278,12 +309,12 @@
   function update(dt) {
     if (state !== 'playing') return;
 
-    // Move player toward target with speed
+    // Move player based on held input (touch/mouse/keys)
     const moveSpeed = 380; // px/sec
-    const dx = player.targetX - player.x;
-    const step = Math.sign(dx) * Math.min(Math.abs(dx), moveSpeed * dt);
-    const newX = player.x + step;
-    player.x = constrainPlayerTo(newX);
+    const dir = Math.sign(pointerDir + (keyRight ? 1 : 0) - (keyLeft ? 1 : 0));
+    if (dir !== 0) {
+      player.x = constrainPlayerTo(player.x + dir * moveSpeed * dt);
+    }
 
     // Spawn
     spawnTimer += dt * 1000;
@@ -332,8 +363,8 @@
           // try pushing left then right
           for (let off = 1; off < N_COLS; off++) {
             const lc = col - off, rc = col + off;
-            if (lc >= 0 && !piles[lc]) { player.x = lc * COL_W + COL_W / 2; player.targetX = player.x; break; }
-            if (rc < N_COLS && !piles[rc]) { player.x = rc * COL_W + COL_W / 2; player.targetX = player.x; break; }
+            if (lc >= 0 && !piles[lc]) { player.x = lc * COL_W + COL_W / 2; break; }
+            if (rc < N_COLS && !piles[rc]) { player.x = rc * COL_W + COL_W / 2; break; }
           }
         }
         continue;
