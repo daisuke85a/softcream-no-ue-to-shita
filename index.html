@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ソフトクリーム積み</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #1a1a2e;
+    font-family: 'Courier New', 'ヒラギノ角ゴ ProN', monospace;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  #wrap {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    touch-action: none;
+    box-shadow: 0 0 24px rgba(0,0,0,0.5);
+  }
+  #overlay {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.7);
+    z-index: 10;
+  }
+  #overlay.show { display: flex; }
+  #panel {
+    background: #2a2a3e;
+    color: #fff;
+    padding: 28px 32px;
+    border-radius: 12px;
+    text-align: center;
+    border: 3px solid #ffd166;
+    max-width: 90vw;
+  }
+  #panel h1 { font-size: 24px; margin-bottom: 14px; letter-spacing: 2px; }
+  #panel .score { font-size: 36px; color: #ffd166; margin: 12px 0; font-weight: bold; }
+  #panel .hint { font-size: 14px; line-height: 1.8; margin: 14px 0; color: #d0d0e0; }
+  #panel button {
+    margin-top: 12px;
+    padding: 12px 32px;
+    font-size: 18px;
+    border: none;
+    border-radius: 8px;
+    background: #e63946;
+    color: #fff;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: bold;
+    letter-spacing: 2px;
+  }
+  #panel button:active { transform: translateY(2px); }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game"></canvas></div>
+<div id="overlay" class="show">
+  <div id="panel">
+    <h1 id="title">ソフトクリーム積み</h1>
+    <div class="score" id="scoreLabel" style="display:none">スコア: <span id="finalScore">0</span></div>
+    <div class="hint" id="hint">
+      画面をタップした位置に移動！<br>
+      落ちてくるソフトクリームをキャッチ。<br>
+      同じ色 = 1つにまとまる<br>
+      違う色 = 2段に重なる<br>
+      落ちたソフトは3ターンで溶ける
+    </div>
+    <button id="startBtn">スタート</button>
+  </div>
+</div>
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const titleEl = document.getElementById('title');
+  const hintEl = document.getElementById('hint');
+  const scoreLabel = document.getElementById('scoreLabel');
+  const finalScore = document.getElementById('finalScore');
+
+  const LW = 360, LH = 640;
+
+  function resize() {
+    const ww = window.innerWidth, wh = window.innerHeight;
+    const r = LW / LH;
+    let w, h;
+    if (ww / wh > r) { h = wh; w = wh * r; }
+    else { w = ww; h = ww / r; }
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = LW * dpr;
+    canvas.height = LH * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const GROUND_Y = 590;
+  const PIECE_W = 72;             // 5 pieces wide fits LW=360
+  const PIECE_H = 32;
+  const MERGE_GROWTH = 11;
+  const PLAYER_W = 60;
+  const PLAYER_FEET = GROUND_Y;
+  const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
+  const CONE_X_OFFSET = 42;       // cone opening center x (from body center)
+  const CATCH_TOL = 30;           // |piece.x - cone.x| < this -> catch
+  const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
+  const HEAD_TOP_DY = 60;         // head top y (from feet), where hit registers
+  const MIN_SPAWN_X = PLAYER_W / 2 + CONE_X_OFFSET - CATCH_TOL + 4; // keep leftmost pieces catchable
+  const COL_W = PIECE_W;
+  const N_COLS = Math.ceil(LW / COL_W);
+
+  const COLORS = [
+    { main: '#1a1a1a', dark: '#000', light: '#444', name: 'black' },
+    { main: '#ffffff', dark: '#cccccc', light: '#ffffff', name: 'white' },
+    { main: '#e63946', dark: '#a8232f', light: '#ff7080', name: 'red' },
+  ];
+
+  let state = 'title';
+  let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs;
+
+  function reset() {
+    player = { x: LW / 2, targetX: LW / 2 };
+    stack = []; // [{color, h}]
+    falling = []; // [{x, y, color, vy}]
+    piles = {}; // col idx -> [{color, age}] from bottom
+    spawnTimer = 0;
+    spawnInterval = 1500;
+    fallSpeed = 95;
+    turn = 0;
+    score = 0;
+  }
+
+  function startGame() {
+    reset();
+    state = 'playing';
+    overlay.classList.remove('show');
+    lastTs = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    titleEl.textContent = 'ゲームオーバー';
+    scoreLabel.style.display = 'block';
+    finalScore.textContent = score;
+    hintEl.innerHTML = `${turn} 個のソフトクリームが落ちました<br>うち ${score} 個を積み上げ成功`;
+    startBtn.textContent = 'もう一度';
+    overlay.classList.add('show');
+  }
+
+  function colOfX(x) {
+    return Math.max(0, Math.min(N_COLS - 1, Math.floor(x / COL_W)));
+  }
+
+  function pileHeightAtCol(col) {
+    const arr = piles[col];
+    if (!arr || arr.length === 0) return 0;
+    return arr.length * (PIECE_H - 6);
+  }
+
+  function spawnPiece() {
+    // age and melt
+    Object.keys(piles).forEach(c => {
+      piles[c].forEach(p => p.age++);
+      piles[c] = piles[c].filter(p => p.age < 3);
+      if (piles[c].length === 0) delete piles[c];
+    });
+
+    const spawnMin = MIN_SPAWN_X;
+    const spawnMax = LW - PIECE_W / 2;
+    const x = spawnMin + Math.random() * (spawnMax - spawnMin);
+    falling.push({
+      x, y: -PIECE_H,
+      color: Math.floor(Math.random() * 3),
+      vy: fallSpeed,
+      pastCatch: false,
+      pastHit: false,
+    });
+    turn++;
+
+    if (turn % 4 === 0) {
+      spawnInterval = Math.max(650, spawnInterval - 70);
+      fallSpeed = Math.min(260, fallSpeed + 7);
+    }
+  }
+
+  function stackTotalHeight() {
+    return stack.reduce((s, p) => s + p.h, 0);
+  }
+
+  function stackTopY() {
+    return PLAYER_FEET - CONE_TOP_OFFSET - stackTotalHeight();
+  }
+
+  function catchPiece(piece) {
+    const top = stack[stack.length - 1];
+    if (top && top.color === piece.color) {
+      top.h += MERGE_GROWTH;
+    } else {
+      stack.push({ color: piece.color, h: PIECE_H });
+    }
+    score++;
+    if (stackTopY() <= 8) gameOver();
+  }
+
+  function dropToGround(piece) {
+    const col = colOfX(piece.x);
+    if (!piles[col]) piles[col] = [];
+    piles[col].push({ color: piece.color, age: 0 });
+  }
+
+  function isInDanger() {
+    if (state === 'title') return false;
+    const closeY = PLAYER_FEET - 250; // piece within ~250px of feet
+    for (const p of falling) {
+      if (p.pastHit) continue;
+      if (p.y < closeY) continue;
+      if (Math.abs(p.x - player.x) < HIT_TOL + 4) return true;
+    }
+    return false;
+  }
+
+  function constrainPlayerTo(x) {
+    // Snap to position, then check piles. If blocked, find nearest open position.
+    let nx = Math.max(PLAYER_W / 2, Math.min(LW - PLAYER_W / 2, x));
+    // Player blocked by any column with pile height >= threshold (1 piece tall blocks)
+    // Find leftmost and rightmost free positions reachable from current player.x
+    const blocked = c => piles[c] && piles[c].length > 0;
+    const colNow = colOfX(player.x);
+    const colTarget = colOfX(nx);
+    if (colNow === colTarget) return nx;
+    const dir = colTarget > colNow ? 1 : -1;
+    let c = colNow;
+    let lastFreeCol = colNow;
+    while (c !== colTarget) {
+      const next = c + dir;
+      // Check if player at column `next` would overlap a blocked column
+      // Player width spans roughly 1 column (PLAYER_W=28 < COL_W=36)
+      if (blocked(next)) break;
+      lastFreeCol = next;
+      c = next;
+    }
+    if (lastFreeCol === colTarget) return nx;
+    // Stop just before the blocked column
+    if (dir > 0) return Math.min(nx, (lastFreeCol + 1) * COL_W - PLAYER_W / 2 - 1);
+    return Math.max(nx, lastFreeCol * COL_W + PLAYER_W / 2 + 1);
+  }
+
+  // Input
+  function eventToLogicalX(e) {
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    const x = (t.clientX - rect.left) / rect.width * LW;
+    return x;
+  }
+
+  function onPointerMove(e) {
+    if (state !== 'playing') return;
+    e.preventDefault();
+    player.targetX = eventToLogicalX(e);
+  }
+  canvas.addEventListener('touchstart', onPointerMove, { passive: false });
+  canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+  canvas.addEventListener('mousedown', onPointerMove);
+  let mouseDown = false;
+  canvas.addEventListener('mousedown', () => mouseDown = true);
+  window.addEventListener('mouseup', () => mouseDown = false);
+  canvas.addEventListener('mousemove', e => { if (mouseDown) onPointerMove(e); });
+
+  startBtn.addEventListener('click', startGame);
+
+  // Update
+  function update(dt) {
+    if (state !== 'playing') return;
+
+    // Move player toward target with speed
+    const moveSpeed = 380; // px/sec
+    const dx = player.targetX - player.x;
+    const step = Math.sign(dx) * Math.min(Math.abs(dx), moveSpeed * dt);
+    const newX = player.x + step;
+    player.x = constrainPlayerTo(newX);
+
+    // Spawn
+    spawnTimer += dt * 1000;
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer = 0;
+      spawnPiece();
+    }
+
+    // Falling pieces
+    const catchX = player.x + CONE_X_OFFSET;
+    const hitX = player.x;
+    const hitY = PLAYER_FEET - HEAD_TOP_DY;
+    for (let i = falling.length - 1; i >= 0; i--) {
+      const p = falling[i];
+      p.y += p.vy * dt;
+      const pieceBottom = p.y + PIECE_H / 2;
+      const catchY = stackTopY();
+
+      // Catch: first time piece bottom crosses catchY, if aligned with cone
+      if (!p.pastCatch && pieceBottom >= catchY) {
+        if (Math.abs(p.x - catchX) < CATCH_TOL) {
+          catchPiece(p);
+          falling.splice(i, 1);
+          continue;
+        }
+        p.pastCatch = true;
+      }
+
+      // Hit: piece reaches head level aligned with body -> game over
+      if (p.pastCatch && !p.pastHit && pieceBottom >= hitY) {
+        if (Math.abs(p.x - hitX) < HIT_TOL) {
+          gameOver();
+          return;
+        }
+        p.pastHit = true;
+      }
+
+      // Ground / pile landing
+      const col = colOfX(p.x);
+      const pileTop = GROUND_Y - pileHeightAtCol(col);
+      if (pieceBottom >= pileTop) {
+        dropToGround(p);
+        falling.splice(i, 1);
+        // If pile encroaches on player, push player out
+        if (col === colOfX(player.x)) {
+          // try pushing left then right
+          for (let off = 1; off < N_COLS; off++) {
+            const lc = col - off, rc = col + off;
+            if (lc >= 0 && !piles[lc]) { player.x = lc * COL_W + COL_W / 2; player.targetX = player.x; break; }
+            if (rc < N_COLS && !piles[rc]) { player.x = rc * COL_W + COL_W / 2; player.targetX = player.x; break; }
+          }
+        }
+        continue;
+      }
+    }
+
+    // Lose condition: no free space for player at all (very unlikely but possible)
+    let anyFree = false;
+    for (let c = 0; c < N_COLS; c++) if (!piles[c]) { anyFree = true; break; }
+    if (!anyFree) gameOver();
+  }
+
+  // Drawing
+  function drawBg() {
+    const g = ctx.createLinearGradient(0, 0, 0, LH);
+    g.addColorStop(0, '#5ec6ea');
+    g.addColorStop(0.65, '#b8e0f0');
+    g.addColorStop(0.7, '#ffd89b');
+    g.addColorStop(1, '#e8a25b');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, LW, LH);
+
+    // pixel clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    drawCloud(60, 90);
+    drawCloud(260, 140);
+    drawCloud(160, 60);
+
+    // ground line
+    ctx.fillStyle = '#d18a4b';
+    ctx.fillRect(0, GROUND_Y, LW, LH - GROUND_Y);
+    ctx.fillStyle = '#a86838';
+    ctx.fillRect(0, GROUND_Y, LW, 4);
+  }
+
+  function drawCloud(x, y) {
+    const px = 4;
+    [[0,0],[1,0],[2,0],[3,0],[-1,-1],[0,-1],[1,-1],[2,-1],[3,-1],[4,-1],[0,1],[1,1],[2,1],[3,1]].forEach(([a,b]) => {
+      ctx.fillRect(x + a * px, y + b * px, px, px);
+    });
+  }
+
+  function drawSwirl(cx, bottomY, color, fullHeight) {
+    // Draws a single swirl scoop centered at cx, with bottom at bottomY.
+    // fullHeight is total scoop height (varies for merged pieces).
+    const h = Math.max(PIECE_H, fullHeight);
+    const w = PIECE_W;
+    // bands from bottom to top, getting narrower
+    // We draw layered horizontal strips of 4px each.
+    const stripeH = 4;
+    const nStripes = Math.floor(h / stripeH);
+    for (let i = 0; i < nStripes; i++) {
+      const t = i / Math.max(1, nStripes - 1); // 0 at bottom, 1 at top
+      // width: stays near full for bottom ~55%, then tapers sharply toward a pointed top
+      let bw;
+      if (t < 0.55) {
+        bw = w * (1 - t * 0.1);
+      } else {
+        const tt = (t - 0.55) / 0.45;
+        bw = w * (0.945 - tt * 0.75);
+      }
+      bw = Math.max(6, bw);
+      const x = Math.round(cx - bw / 2);
+      const y = bottomY - (i + 1) * stripeH;
+      // alternate light/dark stripe to suggest swirl
+      const useLight = (i % 2 === 0);
+      ctx.fillStyle = useLight ? color.main : color.dark;
+      ctx.fillRect(x, y, Math.round(bw), stripeH);
+      // shading on the right
+      ctx.fillStyle = color.dark;
+      ctx.fillRect(x + Math.round(bw) - 3, y, 3, stripeH);
+      // highlight on left
+      if (color.name !== 'white') {
+        ctx.fillStyle = color.light;
+        ctx.fillRect(x, y, 2, stripeH);
+      }
+    }
+    // outline for white
+    if (color.name === 'white') {
+      ctx.fillStyle = '#888';
+      ctx.fillRect(Math.round(cx - w/2), bottomY - nStripes * stripeH, 1, nStripes * stripeH);
+      ctx.fillRect(Math.round(cx + w/2 - 1), bottomY - nStripes * stripeH, 1, nStripes * stripeH);
+    }
+  }
+
+  function drawSwirlTop(cx, topBottomY, color) {
+    // Small pointed tip on top of stack
+    ctx.fillStyle = color.main;
+    ctx.fillRect(cx - 6, topBottomY - 6, 12, 6);
+    ctx.fillRect(cx - 3, topBottomY - 11, 6, 5);
+    ctx.fillStyle = color.dark;
+    ctx.fillRect(cx + 3, topBottomY - 6, 3, 6);
+    ctx.fillRect(cx + 1, topBottomY - 11, 2, 5);
+  }
+
+  function drawMelt(cx, bottomY, color, age) {
+    // Melting puddle look — flatter, drippy
+    const alpha = age >= 2 ? 0.6 : 1.0;
+    ctx.globalAlpha = alpha;
+    drawSwirl(cx, bottomY, color, PIECE_H - age * 4);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPlayer(x, panicked) {
+    const y = PLAYER_FEET;
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x - 25, y - 3, 50, 4);
+
+    // Legs
+    ctx.fillStyle = '#2c3e74';
+    ctx.fillRect(x - 15, y - 19, 9, 19);
+    ctx.fillRect(x + 6, y - 19, 9, 19);
+    // shoes
+    ctx.fillStyle = '#222';
+    ctx.fillRect(x - 16, y - 4, 12, 4);
+    ctx.fillRect(x + 4, y - 4, 12, 4);
+
+    // Body
+    ctx.fillStyle = '#e63946';
+    ctx.fillRect(x - 19, y - 42, 38, 23);
+    ctx.fillStyle = '#a8232f';
+    ctx.fillRect(x + 11, y - 42, 8, 23);
+
+    // Left arm hanging at side
+    ctx.fillStyle = '#fdd9a0';
+    ctx.fillRect(x - 25, y - 39, 7, 17);
+
+    // Head
+    ctx.fillStyle = '#fdd9a0';
+    ctx.fillRect(x - 14, y - 60, 28, 18);
+    ctx.fillStyle = '#e0bd86';
+    ctx.fillRect(x + 10, y - 60, 4, 18);
+
+    // Hair
+    ctx.fillStyle = '#3a2418';
+    ctx.fillRect(x - 14, y - 60, 28, 6);
+    ctx.fillRect(x - 15, y - 58, 3, 7);
+    ctx.fillRect(x + 12, y - 58, 3, 7);
+
+    if (panicked) {
+      // Wide scared eyes (with whites)
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x - 10, y - 53, 7, 7);
+      ctx.fillRect(x + 3, y - 53, 7, 7);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 7, y - 51, 2, 3);
+      ctx.fillRect(x + 6, y - 51, 2, 3);
+      // Worried eyebrows (slanted inward)
+      ctx.fillStyle = '#3a2418';
+      ctx.fillRect(x - 11, y - 56, 5, 1);
+      ctx.fillRect(x - 10, y - 55, 4, 1);
+      ctx.fillRect(x + 6, y - 56, 5, 1);
+      ctx.fillRect(x + 6, y - 55, 4, 1);
+      // Open shocked mouth
+      ctx.fillStyle = '#3a1a1a';
+      ctx.fillRect(x - 3, y - 47, 7, 5);
+      ctx.fillStyle = '#1a0a0a';
+      ctx.fillRect(x - 2, y - 46, 5, 3);
+      // Sweat drop on right temple (anime style)
+      ctx.fillStyle = '#5cc8eb';
+      ctx.fillRect(x + 15, y - 57, 3, 5);
+      ctx.fillRect(x + 14, y - 54, 5, 2);
+      ctx.fillStyle = '#a8e0f0';
+      ctx.fillRect(x + 15, y - 57, 1, 2);
+    } else {
+      // Normal eyes
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 8, y - 51, 3, 3);
+      ctx.fillRect(x + 5, y - 51, 3, 3);
+      // Normal mouth
+      ctx.fillRect(x - 1, y - 46, 3, 1);
+    }
+
+    // Cone tilted up-right
+    const slices = [
+      { dx: 11, hw: 3,  dy: 46, h: 5 },
+      { dx: 17, hw: 7,  dy: 51, h: 5 },
+      { dx: 23, hw: 11, dy: 56, h: 5 },
+      { dx: 30, hw: 14, dy: 61, h: 5 },
+      { dx: 36, hw: 18, dy: 66, h: 5 },
+      { dx: 42, hw: 22, dy: 71, h: 5 },
+    ];
+    ctx.fillStyle = '#d4a76a';
+    for (const s of slices) {
+      ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, s.h);
+    }
+    ctx.fillStyle = '#a37e44';
+    for (const s of slices) {
+      ctx.fillRect(x + s.dx + s.hw - 4, y - s.dy, 4, s.h);
+    }
+    // waffle stripes
+    ctx.fillStyle = '#8a6d3a';
+    for (let i = 0; i < slices.length - 1; i++) {
+      const s = slices[i];
+      ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, 1);
+    }
+
+    // Right arm + hand gripping cone tip
+    ctx.fillStyle = '#fdd9a0';
+    ctx.fillRect(x + 8, y - 48, 9, 7);
+  }
+
+  function drawStack(cx) {
+    let bottomY = PLAYER_FEET - CONE_TOP_OFFSET;
+    for (let i = 0; i < stack.length; i++) {
+      const piece = stack[i];
+      drawSwirl(cx, bottomY, COLORS[piece.color], piece.h);
+      bottomY -= piece.h;
+    }
+    if (stack.length > 0) {
+      drawSwirlTop(cx, bottomY + 4, COLORS[stack[stack.length - 1].color]);
+    }
+  }
+
+  function drawFalling() {
+    for (const p of falling) {
+      drawSwirl(p.x, p.y + PIECE_H / 2, COLORS[p.color], PIECE_H);
+      drawSwirlTop(p.x, p.y - PIECE_H / 2 + 4, COLORS[p.color]);
+    }
+  }
+
+  function drawPiles() {
+    Object.entries(piles).forEach(([col, arr]) => {
+      const cx = parseInt(col) * COL_W + COL_W / 2;
+      let bottomY = GROUND_Y;
+      arr.forEach((piece, i) => {
+        const h = PIECE_H - 6; // pile pieces flatten
+        drawMelt(cx, bottomY, COLORS[piece.color], piece.age);
+        bottomY -= h;
+      });
+    });
+  }
+
+  function drawHUD() {
+    // Top bar
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, LW, 36);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px "Courier New", monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('SCORE ' + score, 10, 18);
+    ctx.textAlign = 'right';
+    ctx.fillText('TURN ' + turn, LW - 10, 18);
+
+    // Danger line indicator
+    const dangerY = 36;
+    ctx.fillStyle = 'rgba(230,57,70,0.7)';
+    for (let i = 0; i < LW; i += 8) {
+      ctx.fillRect(i, dangerY, 4, 2);
+    }
+  }
+
+  function render() {
+    drawBg();
+    drawPiles();
+    drawPlayer(player.x, isInDanger());
+    drawStack(player.x + CONE_X_OFFSET);
+    drawFalling();
+    drawHUD();
+  }
+
+  function loop(ts) {
+    const dt = Math.min(0.05, (ts - lastTs) / 1000);
+    lastTs = ts;
+    update(dt);
+    render();
+    if (state === 'playing') requestAnimationFrame(loop);
+    else if (state === 'gameover') render();
+  }
+
+  // Initial render of title screen background
+  reset();
+  render();
+})();
+</script>
+</body>
+</html>
