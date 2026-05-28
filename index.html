@@ -426,49 +426,73 @@
     });
   }
 
-  function drawSwirl(cx, bottomY, color, fullHeight) {
-    // Draws a single swirl scoop centered at cx, with bottom at bottomY.
-    // fullHeight is total scoop height (varies for merged pieces).
-    const h = Math.max(PIECE_H, fullHeight);
-    const w = PIECE_W;
-    // bands from bottom to top, getting narrower
-    // We draw layered horizontal strips of 4px each.
-    const stripeH = 4;
-    const nStripes = Math.floor(h / stripeH);
-    for (let i = 0; i < nStripes; i++) {
-      const t = i / Math.max(1, nStripes - 1); // 0 at bottom, 1 at top
-      // width: stays near full for bottom ~55%, then tapers sharply toward a pointed top
-      let bw;
-      if (t < 0.55) {
-        bw = w * (1 - t * 0.1);
-      } else {
-        const tt = (t - 0.55) / 0.45;
-        bw = w * (0.945 - tt * 0.75);
-      }
-      bw = Math.max(6, bw);
-      const x = Math.round(cx - bw / 2);
-      const y = bottomY - (i + 1) * stripeH;
-      // alternate light/dark stripe to suggest swirl
-      const useLight = (i % 2 === 0);
-      ctx.fillStyle = useLight ? color.main : color.dark;
-      ctx.fillRect(x, y, Math.round(bw), stripeH);
-      // shading on the right
-      ctx.fillStyle = color.dark;
-      ctx.fillRect(x + Math.round(bw) - 3, y, 3, stripeH);
-      // highlight on left (subtle edge for white, light shade for others)
-      ctx.fillStyle = color.name === 'white' ? '#dddddd' : color.light;
-      ctx.fillRect(x, y, 2, stripeH);
-    }
-  }
+  // Standard 32px-tall swirl shape. Each row: { w: width, off: x offset from center }.
+  // Rows are stacked top-to-bottom with 4px height each, widening with asymmetric bumps
+  // to resemble a soft-serve / poop-emoji silhouette.
+  const SWIRL_ROWS = [
+    { w: 4,  off: 2 },   // peak
+    { w: 12, off: 4 },   // tilt right
+    { w: 22, off: 2 },
+    { w: 30, off: -4 },  // bump left
+    { w: 40, off: 2 },
+    { w: 50, off: 4 },   // bump right
+    { w: 60, off: 0 },
+    { w: 68, off: 0 },   // wide base
+  ];
+  const SWIRL_STRIPE_H = 4;
 
-  function drawSwirlTop(cx, topBottomY, color) {
-    // Small pointed tip on top of stack
-    ctx.fillStyle = color.main;
-    ctx.fillRect(cx - 6, topBottomY - 6, 12, 6);
-    ctx.fillRect(cx - 3, topBottomY - 11, 6, 5);
-    ctx.fillStyle = color.dark;
-    ctx.fillRect(cx + 3, topBottomY - 6, 3, 6);
-    ctx.fillRect(cx + 1, topBottomY - 11, 2, 5);
+  function drawSwirl(cx, bottomY, color, fullHeight) {
+    // Outlined poop-emoji style soft-serve. fullHeight stretches the middle for merged pieces.
+    const h = Math.max(SWIRL_STRIPE_H, fullHeight);
+    const baseN = SWIRL_ROWS.length;
+    const targetN = Math.max(1, Math.floor(h / SWIRL_STRIPE_H));
+    let rows;
+    if (targetN <= baseN) {
+      // shorter (melting pieces): drop top peak rows
+      rows = SWIRL_ROWS.slice(baseN - targetN);
+    } else {
+      // taller (merged pieces): duplicate the wide middle/lower rows
+      rows = SWIRL_ROWS.slice();
+      const insertSrc = SWIRL_ROWS[5];
+      for (let i = 0; i < targetN - baseN; i++) rows.splice(rows.length - 2, 0, { ...insertSrc });
+    }
+
+    const totalH = rows.length * SWIRL_STRIPE_H;
+    let prevLeft = null, prevRight = null;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const yTop = bottomY - totalH + i * SWIRL_STRIPE_H;
+      const leftX = Math.round(cx + row.off - row.w / 2);
+      const rightX = Math.round(cx + row.off + row.w / 2);
+      const width = rightX - leftX;
+
+      // Body
+      ctx.fillStyle = color.main;
+      ctx.fillRect(leftX, yTop, width, SWIRL_STRIPE_H);
+      // Right shading
+      ctx.fillStyle = color.dark;
+      ctx.fillRect(rightX - 4, yTop, 4, SWIRL_STRIPE_H);
+      // Left highlight (subtle gray for white)
+      ctx.fillStyle = color.name === 'white' ? '#dddddd' : color.light;
+      ctx.fillRect(leftX, yTop, 2, SWIRL_STRIPE_H);
+      // Side outline
+      ctx.fillStyle = '#000';
+      ctx.fillRect(leftX, yTop, 1, SWIRL_STRIPE_H);
+      ctx.fillRect(rightX - 1, yTop, 1, SWIRL_STRIPE_H);
+      // Top outline (full top for peak row, otherwise just over the exposed "stair" parts)
+      if (i === 0) {
+        ctx.fillRect(leftX, yTop, width, 1);
+      } else {
+        if (leftX < prevLeft) ctx.fillRect(leftX, yTop, prevLeft - leftX, 1);
+        if (rightX > prevRight) ctx.fillRect(prevRight, yTop, rightX - prevRight, 1);
+      }
+      // Bottom outline only on the last row (closes the silhouette)
+      if (i === rows.length - 1) {
+        ctx.fillRect(leftX, yTop + SWIRL_STRIPE_H - 1, width, 1);
+      }
+      prevLeft = leftX;
+      prevRight = rightX;
+    }
   }
 
   function drawMelt(cx, bottomY, color, age) {
@@ -481,76 +505,131 @@
 
   function drawPlayer(x, panicked) {
     const y = PLAYER_FEET;
+
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(x - 25, y - 3, 50, 4);
+    ctx.fillRect(x - 14, y - 3, 28, 4);
 
-    // Legs
-    ctx.fillStyle = '#2c3e74';
-    ctx.fillRect(x - 15, y - 19, 9, 19);
-    ctx.fillRect(x + 6, y - 19, 9, 19);
-    // shoes
-    ctx.fillStyle = '#222';
-    ctx.fillRect(x - 16, y - 4, 12, 4);
-    ctx.fillRect(x + 4, y - 4, 12, 4);
+    // Shoes (black) - feet
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 12, y - 6, 10, 6);
+    ctx.fillRect(x + 2, y - 6, 10, 6);
+    // ankle skin
+    ctx.fillStyle = '#fdd9a0';
+    ctx.fillRect(x - 11, y - 10, 8, 4);
+    ctx.fillRect(x + 3, y - 10, 8, 4);
 
-    // Body
-    ctx.fillStyle = '#e63946';
-    ctx.fillRect(x - 19, y - 42, 38, 23);
+    // Skirt (navy pleats)
+    ctx.fillStyle = '#1f3a5f';
+    ctx.fillRect(x - 14, y - 22, 28, 12);
+    ctx.fillStyle = '#142a45';
+    ctx.fillRect(x - 10, y - 22, 1, 12);
+    ctx.fillRect(x - 5, y - 22, 1, 12);
+    ctx.fillRect(x + 0, y - 22, 1, 12);
+    ctx.fillRect(x + 5, y - 22, 1, 12);
+    ctx.fillRect(x + 9, y - 22, 1, 12);
+    // skirt outline
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 15, y - 22, 1, 12);
+    ctx.fillRect(x + 14, y - 22, 1, 12);
+    ctx.fillRect(x - 14, y - 11, 28, 1);
+
+    // Jacket (navy)
+    ctx.fillStyle = '#1f3a5f';
+    ctx.fillRect(x - 13, y - 36, 26, 14);
+    ctx.fillStyle = '#142a45';
+    ctx.fillRect(x + 9, y - 36, 4, 14);
+    // jacket outline
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 14, y - 36, 1, 14);
+    ctx.fillRect(x + 13, y - 36, 1, 14);
+
+    // Tie (red)
     ctx.fillStyle = '#a8232f';
-    ctx.fillRect(x + 11, y - 42, 8, 23);
+    ctx.fillRect(x - 2, y - 34, 5, 11);
+    ctx.fillStyle = '#7a1820';
+    ctx.fillRect(x + 1, y - 34, 2, 11);
 
-    // Left arm hanging at side
+    // Left arm hanging at side (jacket sleeve)
+    ctx.fillStyle = '#1f3a5f';
+    ctx.fillRect(x - 17, y - 34, 3, 10);
+    // hand
     ctx.fillStyle = '#fdd9a0';
-    ctx.fillRect(x - 25, y - 39, 7, 17);
+    ctx.fillRect(x - 17, y - 24, 3, 3);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 18, y - 34, 1, 13);
+    ctx.fillRect(x - 14, y - 34, 1, 1);
 
-    // Head
+    // Head (skin)
     ctx.fillStyle = '#fdd9a0';
-    ctx.fillRect(x - 14, y - 60, 28, 18);
+    ctx.fillRect(x - 13, y - 60, 26, 24);
     ctx.fillStyle = '#e0bd86';
-    ctx.fillRect(x + 10, y - 60, 4, 18);
+    ctx.fillRect(x + 10, y - 60, 3, 24);
+    // head outline
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 14, y - 60, 1, 24);
+    ctx.fillRect(x + 13, y - 60, 1, 24);
+    ctx.fillRect(x - 13, y - 36, 26, 1);
 
-    // Hair
-    ctx.fillStyle = '#3a2418';
-    ctx.fillRect(x - 14, y - 60, 28, 6);
-    ctx.fillRect(x - 15, y - 58, 3, 7);
-    ctx.fillRect(x + 12, y - 58, 3, 7);
+    // Hair (black bob: top cap + bangs + side falls)
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 14, y - 60, 28, 9);  // top cap (wraps outline corners)
+    ctx.fillRect(x - 11, y - 51, 22, 3);  // bangs across forehead
+    ctx.fillRect(x - 14, y - 51, 4, 14);  // left side bob
+    ctx.fillRect(x + 10, y - 51, 4, 14);  // right side bob
+    // tiny hair strand lines on top cap (slightly lighter)
+    ctx.fillStyle = '#2a2a2a';
+    for (let sx = -10; sx <= 10; sx += 4) ctx.fillRect(x + sx, y - 59, 1, 7);
+    // hair outline (top edge)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 14, y - 61, 28, 1);
 
     if (panicked) {
-      // Wide scared eyes (with whites)
+      // wide scared eyes
       ctx.fillStyle = '#fff';
-      ctx.fillRect(x - 10, y - 53, 7, 7);
-      ctx.fillRect(x + 3, y - 53, 7, 7);
+      ctx.fillRect(x - 9, y - 48, 6, 6);
+      ctx.fillRect(x + 3, y - 48, 6, 6);
       ctx.fillStyle = '#000';
-      ctx.fillRect(x - 7, y - 51, 2, 3);
-      ctx.fillRect(x + 6, y - 51, 2, 3);
-      // Worried eyebrows (slanted inward)
-      ctx.fillStyle = '#3a2418';
-      ctx.fillRect(x - 11, y - 56, 5, 1);
-      ctx.fillRect(x - 10, y - 55, 4, 1);
-      ctx.fillRect(x + 6, y - 56, 5, 1);
-      ctx.fillRect(x + 6, y - 55, 4, 1);
-      // Open shocked mouth
+      ctx.fillRect(x - 7, y - 47, 2, 3);
+      ctx.fillRect(x + 5, y - 47, 2, 3);
+      // worried brows
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 9, y - 49, 5, 1);
+      ctx.fillRect(x + 4, y - 49, 5, 1);
+      // open shocked mouth
       ctx.fillStyle = '#3a1a1a';
-      ctx.fillRect(x - 3, y - 47, 7, 5);
-      ctx.fillStyle = '#1a0a0a';
-      ctx.fillRect(x - 2, y - 46, 5, 3);
-      // Sweat drop on right temple (anime style)
-      ctx.fillStyle = '#5cc8eb';
-      ctx.fillRect(x + 15, y - 57, 3, 5);
-      ctx.fillRect(x + 14, y - 54, 5, 2);
-      ctx.fillStyle = '#a8e0f0';
-      ctx.fillRect(x + 15, y - 57, 1, 2);
-    } else {
-      // Normal eyes
+      ctx.fillRect(x - 3, y - 41, 6, 5);
       ctx.fillStyle = '#000';
-      ctx.fillRect(x - 8, y - 51, 3, 3);
-      ctx.fillRect(x + 5, y - 51, 3, 3);
-      // Normal mouth
-      ctx.fillRect(x - 1, y - 46, 3, 1);
+      ctx.fillRect(x - 4, y - 41, 1, 5);
+      ctx.fillRect(x + 3, y - 41, 1, 5);
+      ctx.fillRect(x - 3, y - 42, 6, 1);
+      ctx.fillRect(x - 3, y - 36, 6, 1);
+      // sweat drop on right side of head
+      ctx.fillStyle = '#5cc8eb';
+      ctx.fillRect(x + 16, y - 52, 3, 5);
+      ctx.fillRect(x + 15, y - 49, 5, 2);
+      ctx.fillStyle = '#a8e0f0';
+      ctx.fillRect(x + 16, y - 52, 1, 2);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x + 15, y - 53, 5, 1);
+      ctx.fillRect(x + 14, y - 49, 1, 3);
+      ctx.fillRect(x + 20, y - 49, 1, 3);
+      ctx.fillRect(x + 15, y - 47, 5, 1);
+    } else {
+      // normal eyes (black square dots)
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 7, y - 47, 3, 3);
+      ctx.fillRect(x + 4, y - 47, 3, 3);
+      // pink cheeks
+      ctx.fillStyle = '#ffb0b0';
+      ctx.fillRect(x - 11, y - 43, 3, 2);
+      ctx.fillRect(x + 8, y - 43, 3, 2);
+      // small smile mouth
+      ctx.fillStyle = '#000';
+      ctx.fillRect(x - 2, y - 41, 4, 2);
     }
 
-    // Cone tilted up-right
+    // Cone tilted up-right (waffle cone with rim)
     const slices = [
       { dx: 11, hw: 3,  dy: 46, h: 5 },
       { dx: 19, hw: 7,  dy: 51, h: 5 },
@@ -559,24 +638,44 @@
       { dx: 44, hw: 18, dy: 66, h: 5 },
       { dx: 52, hw: 22, dy: 71, h: 5 },
     ];
+    // body fill
     ctx.fillStyle = '#d4a76a';
-    for (const s of slices) {
-      ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, s.h);
-    }
+    for (const s of slices) ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, s.h);
+    // right shading
     ctx.fillStyle = '#a37e44';
-    for (const s of slices) {
-      ctx.fillRect(x + s.dx + s.hw - 4, y - s.dy, 4, s.h);
-    }
-    // waffle stripes
+    for (const s of slices) ctx.fillRect(x + s.dx + s.hw - 4, y - s.dy, 4, s.h);
+    // rim line (top slice top) and waffle separators
     ctx.fillStyle = '#8a6d3a';
     for (let i = 0; i < slices.length - 1; i++) {
       const s = slices[i];
       ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, 1);
     }
+    // outline around the cone
+    ctx.fillStyle = '#000';
+    let prevL = null, prevR = null;
+    for (let i = slices.length - 1; i >= 0; i--) {
+      const s = slices[i];
+      const l = x + s.dx - s.hw, r = x + s.dx + s.hw;
+      ctx.fillRect(l, y - s.dy, 1, s.h);
+      ctx.fillRect(r - 1, y - s.dy, 1, s.h);
+      if (i === slices.length - 1) {
+        ctx.fillRect(l, y - s.dy, s.hw * 2, 1); // opening top
+      } else {
+        if (l < prevL) ctx.fillRect(l, y - s.dy + s.h, prevL - l, 1);
+        if (r > prevR) ctx.fillRect(prevR, y - s.dy + s.h, r - prevR, 1);
+      }
+      if (i === 0) ctx.fillRect(l, y - s.dy + s.h - 1, s.hw * 2, 1); // tip bottom
+      prevL = l; prevR = r;
+    }
 
-    // Right arm + hand gripping cone tip
+    // Right hand gripping cone tip
     ctx.fillStyle = '#fdd9a0';
-    ctx.fillRect(x + 8, y - 48, 9, 7);
+    ctx.fillRect(x + 8, y - 44, 9, 6);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + 7, y - 44, 1, 6);
+    ctx.fillRect(x + 17, y - 44, 1, 6);
+    ctx.fillRect(x + 8, y - 45, 9, 1);
+    ctx.fillRect(x + 8, y - 38, 9, 1);
   }
 
   function drawStack(cx) {
@@ -586,15 +685,11 @@
       drawSwirl(cx, bottomY, COLORS[piece.color], piece.h);
       bottomY -= piece.h;
     }
-    if (stack.length > 0) {
-      drawSwirlTop(cx, bottomY + 4, COLORS[stack[stack.length - 1].color]);
-    }
   }
 
   function drawFalling() {
     for (const p of falling) {
       drawSwirl(p.x, p.y + PIECE_H / 2, COLORS[p.color], PIECE_H);
-      drawSwirlTop(p.x, p.y - PIECE_H / 2 + 4, COLORS[p.color]);
     }
   }
 
