@@ -117,7 +117,7 @@
   const PLAYER_W = 60;
   const PLAYER_FEET = GROUND_Y;
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
-  const CONE_X_OFFSET = 42;       // cone opening center x (from body center)
+  const CONE_X_OFFSET = 52;       // cone opening center x (from body center)
   const CATCH_TOL = 30;           // |piece.x - cone.x| < this -> catch
   const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
   const HEAD_TOP_DY = 60;         // head top y (from feet), where hit registers
@@ -534,11 +534,11 @@
     // Cone tilted up-right
     const slices = [
       { dx: 11, hw: 3,  dy: 46, h: 5 },
-      { dx: 17, hw: 7,  dy: 51, h: 5 },
-      { dx: 23, hw: 11, dy: 56, h: 5 },
-      { dx: 30, hw: 14, dy: 61, h: 5 },
-      { dx: 36, hw: 18, dy: 66, h: 5 },
-      { dx: 42, hw: 22, dy: 71, h: 5 },
+      { dx: 19, hw: 7,  dy: 51, h: 5 },
+      { dx: 27, hw: 11, dy: 56, h: 5 },
+      { dx: 36, hw: 14, dy: 61, h: 5 },
+      { dx: 44, hw: 18, dy: 66, h: 5 },
+      { dx: 52, hw: 22, dy: 71, h: 5 },
     ];
     ctx.fillStyle = '#d4a76a';
     for (const s of slices) {
