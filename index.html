@@ -348,13 +348,13 @@
     if (state !== 'playing') return;
 
     // Move player based on held input.
-    // Touch/mouse: walk toward the touched x and stop there (capped step prevents overshoot).
+    // Touch/mouse: walk toward the touched x; stop exactly there. Release stops immediately.
     // Keys: continuous direction while held.
     const moveSpeed = 280; // px/sec
     pointerDir = 0;
     if (pointerDown && pointerTargetX !== null) {
       const dx = pointerTargetX - player.x;
-      if (Math.abs(dx) > 6) {
+      if (Math.abs(dx) > 0.5) {
         pointerDir = Math.sign(dx);
         const step = pointerDir * Math.min(Math.abs(dx), moveSpeed * dt);
         player.x = constrainPlayerTo(player.x + step);
