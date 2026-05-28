@@ -118,6 +118,8 @@
   const PLAYER_FEET = GROUND_Y;
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
   const CONE_X_OFFSET = 52;       // cone opening center x (from body center)
+  const CONE_OPENING_HW = 22;     // cone opening half-width (= widest slice in drawPlayer)
+  const MAX_BODY_X = LW - CONE_X_OFFSET - CONE_OPENING_HW; // cone right edge cannot pass LW
   const CATCH_TOL = 36;           // |piece.x - cone.x| < this -> catch (= stack half-width)
   const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
   const HEAD_TOP_DY = 60;         // head top y (from feet), where hit registers
@@ -248,7 +250,7 @@
 
   function constrainPlayerTo(x) {
     // Pile-based: contiguous free-column range around the player's current column.
-    let nx = Math.max(PLAYER_W / 2, Math.min(LW - PLAYER_W / 2, x));
+    let nx = Math.max(PLAYER_W / 2, Math.min(MAX_BODY_X, x));
     const blocked = c => piles[c] && piles[c].length > 0;
     const playerCol = colOfX(player.x);
     let leftCol = playerCol;
