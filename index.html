@@ -178,6 +178,19 @@
     overlay.classList.add('show');
   }
 
+  const CLEAR_BONUS = 100;
+  function gameClear() {
+    state = 'gameover';
+    const caught = score;
+    score += CLEAR_BONUS;
+    titleEl.textContent = 'GAME CLEAR!';
+    scoreLabel.style.display = 'block';
+    finalScore.textContent = score;
+    hintEl.innerHTML = `画面上まで積み切り達成！<br>${caught} 個キャッチ + クリアボーナス <strong>+${CLEAR_BONUS}</strong><br>合計 <strong>${score}</strong> pt`;
+    startBtn.textContent = 'もう一度';
+    overlay.classList.add('show');
+  }
+
   function colOfX(x) {
     return Math.max(0, Math.min(N_COLS - 1, Math.floor(x / COL_W)));
   }
@@ -230,7 +243,7 @@
       stack.push({ color: piece.color, h: PIECE_H });
     }
     score++;
-    if (stackTopY() <= 8) gameOver();
+    if (stackTopY() <= 8) gameClear();
   }
 
   function dropToGround(piece) {
