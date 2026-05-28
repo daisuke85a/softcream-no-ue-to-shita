@@ -136,6 +136,7 @@
   let state = 'title';
   let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs;
   let pointerDir = 0;   // -1 / 0 / +1 from touch or mouse hold
+  let pointerDown = false;
   let keyLeft = false;
   let keyRight = false;
 
@@ -153,6 +154,7 @@
 
   function clearInput() {
     pointerDir = 0;
+    pointerDown = false;
     keyLeft = false;
     keyRight = false;
   }
@@ -290,20 +292,24 @@
     return (t.clientX - rect.left) / rect.width * LW;
   }
   function dirFromX(x) {
-    return x < LW / 2 ? -1 : 1;
+    const dx = x - player.x;
+    if (Math.abs(dx) < 8) return 0;  // small dead zone so tapping on the player is a no-op
+    return dx < 0 ? -1 : 1;
   }
   function onPointerDown(e) {
     if (state !== 'playing') return;
     e.preventDefault();
+    pointerDown = true;
     pointerDir = dirFromX(eventToLogicalX(e));
   }
   function onPointerMove(e) {
-    if (state !== 'playing' || pointerDir === 0) return;
+    if (state !== 'playing' || !pointerDown) return;
     e.preventDefault();
     pointerDir = dirFromX(eventToLogicalX(e));
   }
   function onPointerUp(e) {
     if (e && e.preventDefault) e.preventDefault();
+    pointerDown = false;
     pointerDir = 0;
   }
   canvas.addEventListener('touchstart', onPointerDown, { passive: false });
