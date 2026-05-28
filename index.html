@@ -135,8 +135,9 @@
 
   let state = 'title';
   let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs;
-  let pointerDir = 0;   // -1 / 0 / +1 from touch or mouse hold
+  let pointerDir = 0;        // -1 / 0 / +1, computed each frame from target vs player.x
   let pointerDown = false;
+  let pointerTargetX = null; // last touched x; player walks toward this and stops
   let keyLeft = false;
   let keyRight = false;
 
@@ -155,6 +156,7 @@
   function clearInput() {
     pointerDir = 0;
     pointerDown = false;
+    pointerTargetX = null;
     keyLeft = false;
     keyRight = false;
   }
@@ -304,25 +306,21 @@
     const t = e.touches ? e.touches[0] : e;
     return (t.clientX - rect.left) / rect.width * LW;
   }
-  function dirFromX(x) {
-    const dx = x - player.x;
-    if (Math.abs(dx) < 8) return 0;  // small dead zone so tapping on the player is a no-op
-    return dx < 0 ? -1 : 1;
-  }
   function onPointerDown(e) {
     if (state !== 'playing') return;
     e.preventDefault();
     pointerDown = true;
-    pointerDir = dirFromX(eventToLogicalX(e));
+    pointerTargetX = eventToLogicalX(e);
   }
   function onPointerMove(e) {
     if (state !== 'playing' || !pointerDown) return;
     e.preventDefault();
-    pointerDir = dirFromX(eventToLogicalX(e));
+    pointerTargetX = eventToLogicalX(e);
   }
   function onPointerUp(e) {
     if (e && e.preventDefault) e.preventDefault();
     pointerDown = false;
+    pointerTargetX = null;
     pointerDir = 0;
   }
   canvas.addEventListener('touchstart', onPointerDown, { passive: false });
@@ -349,11 +347,22 @@
   function update(dt) {
     if (state !== 'playing') return;
 
-    // Move player based on held input (touch/mouse/keys)
+    // Move player based on held input.
+    // Touch/mouse: walk toward the touched x and stop there (capped step prevents overshoot).
+    // Keys: continuous direction while held.
     const moveSpeed = 280; // px/sec
-    const dir = Math.sign(pointerDir + (keyRight ? 1 : 0) - (keyLeft ? 1 : 0));
-    if (dir !== 0) {
-      player.x = constrainPlayerTo(player.x + dir * moveSpeed * dt);
+    pointerDir = 0;
+    if (pointerDown && pointerTargetX !== null) {
+      const dx = pointerTargetX - player.x;
+      if (Math.abs(dx) > 6) {
+        pointerDir = Math.sign(dx);
+        const step = pointerDir * Math.min(Math.abs(dx), moveSpeed * dt);
+        player.x = constrainPlayerTo(player.x + step);
+      }
+    }
+    const keyDir = (keyRight ? 1 : 0) - (keyLeft ? 1 : 0);
+    if (keyDir !== 0) {
+      player.x = constrainPlayerTo(player.x + keyDir * moveSpeed * dt);
     }
 
     // Spawn
