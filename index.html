@@ -237,29 +237,18 @@
   }
 
   function constrainPlayerTo(x) {
-    // Snap to position, then check piles. If blocked, find nearest open position.
+    // Compute the contiguous free-column range around the player's current column,
+    // then clamp x accounting for player width so neither edge enters a blocked column.
     let nx = Math.max(PLAYER_W / 2, Math.min(LW - PLAYER_W / 2, x));
-    // Player blocked by any column with pile height >= threshold (1 piece tall blocks)
-    // Find leftmost and rightmost free positions reachable from current player.x
     const blocked = c => piles[c] && piles[c].length > 0;
-    const colNow = colOfX(player.x);
-    const colTarget = colOfX(nx);
-    if (colNow === colTarget) return nx;
-    const dir = colTarget > colNow ? 1 : -1;
-    let c = colNow;
-    let lastFreeCol = colNow;
-    while (c !== colTarget) {
-      const next = c + dir;
-      // Check if player at column `next` would overlap a blocked column
-      // Player width spans roughly 1 column (PLAYER_W=28 < COL_W=36)
-      if (blocked(next)) break;
-      lastFreeCol = next;
-      c = next;
-    }
-    if (lastFreeCol === colTarget) return nx;
-    // Stop just before the blocked column
-    if (dir > 0) return Math.min(nx, (lastFreeCol + 1) * COL_W - PLAYER_W / 2 - 1);
-    return Math.max(nx, lastFreeCol * COL_W + PLAYER_W / 2 + 1);
+    const playerCol = colOfX(player.x);
+    let leftCol = playerCol;
+    while (leftCol - 1 >= 0 && !blocked(leftCol - 1)) leftCol--;
+    let rightCol = playerCol;
+    while (rightCol + 1 < N_COLS && !blocked(rightCol + 1)) rightCol++;
+    const minX = leftCol * COL_W + PLAYER_W / 2;
+    const maxX = (rightCol + 1) * COL_W - PLAYER_W / 2;
+    return Math.max(minX, Math.min(maxX, nx));
   }
 
   // Input
