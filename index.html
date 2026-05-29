@@ -513,16 +513,25 @@
   // Stack pieces with 3+ same-color merges (h >= base + 2 * grow) swap to the
   // "with specks" SVG variant which includes the original top-left dots.
   const SPECKS_THRESHOLD = PIECE_H + 2 * MERGE_GROWTH; // 32 + 22 = 54
+  // Native dimensions of the scoop SVGs (rows). The no-specks SVG is just the
+  // 14-row swirl body. The with-specks SVG keeps the original 19 rows (5 speck
+  // rows above the same 14-row body). To keep the body the same size in both
+  // variants, the with-specks render is stretched by 19/14 along Y so the
+  // specks sit above the body without compressing it.
+  const SCOOP_NO_SPECKS_ROWS = 14;
+  const SCOOP_WITH_SPECKS_ROWS = 19;
+  const SPECKS_RENDER_RATIO = SCOOP_WITH_SPECKS_ROWS / SCOOP_NO_SPECKS_ROWS;
 
-  function drawSwirl(cx, bottomY, color, fullHeight) {
-    const useSpecks = fullHeight >= SPECKS_THRESHOLD;
+  function drawSwirl(cx, bottomY, color, fullHeight, isTopOfStack) {
+    const useSpecks = !!isTopOfStack && fullHeight >= SPECKS_THRESHOLD;
     const img = (useSpecks ? SCOOP_SPECKS_IMG_BY_NAME : SCOOP_IMG_BY_NAME)[color.name];
-    const h = Math.max(4, fullHeight);
+    const bodyH = Math.max(4, fullHeight);
+    const renderH = useSpecks ? bodyH * SPECKS_RENDER_RATIO : bodyH;
     const w = PIECE_W;
     const x = Math.round(cx - w / 2);
-    const y = Math.round(bottomY - h);
+    const y = Math.round(bottomY - renderH);
     if (img && img.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, x, y, w, Math.round(h));
+      ctx.drawImage(img, x, y, w, Math.round(renderH));
     }
   }
 
@@ -565,7 +574,7 @@
     let bottomY = PLAYER_FEET - CONE_TOP_OFFSET;
     for (let i = 0; i < stack.length; i++) {
       const piece = stack[i];
-      drawSwirl(cx, bottomY, COLORS[piece.color], piece.h);
+      drawSwirl(cx, bottomY, COLORS[piece.color], piece.h, i === stack.length - 1);
       bottomY -= piece.h;
     }
   }
