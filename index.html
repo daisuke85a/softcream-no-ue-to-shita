@@ -502,6 +502,10 @@
     });
   }
 
+  // Stack pieces with 3+ same-color merges (h >= base + 2 * grow) sparkle
+  // with the little "ちょんちょんちょん" specks from the reference image.
+  const SPARKLE_THRESHOLD = PIECE_H + 2 * MERGE_GROWTH; // 32 + 22 = 54
+
   function drawSwirl(cx, bottomY, color, fullHeight) {
     // Faithful re-render of the reference soft-serve SVG. fullHeight stretches it
     // vertically for merged or melting pieces.
@@ -512,6 +516,14 @@
     const y = Math.round(bottomY - h);
     if (img && img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, x, y, w, Math.round(h));
+    }
+    if (fullHeight >= SPARKLE_THRESHOLD) {
+      ctx.fillStyle = '#181818';
+      // three tiny black specks scattered up-left of the scoop, matching the
+      // reference image's "steam" dots
+      ctx.fillRect(x + 6,  y - 5, 2, 2);
+      ctx.fillRect(x + 14, y - 9, 2, 2);
+      ctx.fillRect(x + 10, y + 1, 2, 2);
     }
   }
 
