@@ -71,11 +71,12 @@
     <h1 id="title">ソフトクリーム積み</h1>
     <div class="score" id="scoreLabel" style="display:none">スコア: <span id="finalScore">0</span></div>
     <div class="hint" id="hint">
-      画面の左半分・右半分を<strong>長押し</strong>で移動！<br>
+      タップした位置に歩いて停止。離すと止まる。<br>
       PC: ← / → キーでも操作可<br>
       落ちてくるソフトをキャッチ → 積み上げ。<br>
-      同じ色は合体、違う色は段に。<br>
-      落ちたソフトは3ターンで溶ける
+      右端の<strong>お客さん</strong>に渡してスコア！<br>
+      黄色の <strong>BONUS LINE</strong> 以上で渡すと大ボーナス。<br>
+      渡すたびに落下スピードUP。
     </div>
     <button id="startBtn">スタート</button>
   </div>
@@ -127,6 +128,15 @@
   const COL_W = PIECE_W;
   const N_COLS = Math.ceil(LW / COL_W);
 
+  // Delivery / customer / max line
+  const CUSTOMER_X = 340;         // customer's center x
+  const MAX_LINE_Y = 40;          // bonus threshold (stack top here-or-above => bonus on delivery)
+  const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
+  const DELIVERY_SCORE = 10;
+  const DELIVERY_BONUS = 50;
+  const SPEED_INCREMENT = 20;     // fallSpeed gained per delivery
+  const FALL_SPEED_MAX = 350;
+
   const COLORS = [
     { main: '#1a1a1a', dark: '#000', light: '#444', name: 'black' },
     { main: '#ffffff', dark: '#cccccc', light: '#ffffff', name: 'white' },
@@ -134,7 +144,7 @@
   ];
 
   let state = 'title';
-  let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs;
+  let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs, deliveries, popups;
   let pointerDir = 0;        // -1 / 0 / +1, computed each frame from target vs player.x
   let pointerDown = false;
   let pointerTargetX = null; // last touched x; player walks toward this and stops
@@ -151,6 +161,8 @@
     fallSpeed = 95;
     turn = 0;
     score = 0;
+    deliveries = 0;
+    popups = []; // [{x, y, text, age, color}]
   }
 
   function clearInput() {
@@ -180,17 +192,20 @@
     overlay.classList.add('show');
   }
 
-  const CLEAR_BONUS = 100;
-  function gameClear() {
-    state = 'gameover';
-    const caught = score;
-    score += CLEAR_BONUS;
-    titleEl.textContent = 'GAME CLEAR!';
-    scoreLabel.style.display = 'block';
-    finalScore.textContent = score;
-    hintEl.innerHTML = `画面上まで積み切り達成！<br>${caught} 個キャッチ + クリアボーナス <strong>+${CLEAR_BONUS}</strong><br>合計 <strong>${score}</strong> pt`;
-    startBtn.textContent = 'もう一度';
-    overlay.classList.add('show');
+  function deliverStack() {
+    const wasMaxBonus = stackTopY() <= MAX_LINE_Y;
+    const earned = DELIVERY_SCORE + (wasMaxBonus ? DELIVERY_BONUS : 0);
+    score += earned;
+    deliveries++;
+    fallSpeed = Math.min(FALL_SPEED_MAX, fallSpeed + SPEED_INCREMENT);
+    stack = [];
+    addPopup(CUSTOMER_X - 30, PLAYER_FEET - 70,
+             wasMaxBonus ? `+${earned} BONUS!` : `+${earned}`,
+             wasMaxBonus ? '#ffd166' : '#ffffff');
+  }
+
+  function addPopup(x, y, text, color) {
+    popups.push({ x, y, text, age: 0, color: color || '#ffffff' });
   }
 
   function colOfX(x) {
@@ -245,7 +260,7 @@
       stack.push({ color: piece.color, h: PIECE_H });
     }
     score++;
-    if (stackTopY() <= 8) gameClear();
+    if (stackTopY() <= TOP_GAMEOVER_Y) gameOver();
   }
 
   function dropToGround(piece) {
@@ -363,6 +378,17 @@
     const keyDir = (keyRight ? 1 : 0) - (keyLeft ? 1 : 0);
     if (keyDir !== 0) {
       player.x = constrainPlayerTo(player.x + keyDir * moveSpeed * dt);
+    }
+
+    // Delivery: handing the stack to the customer when reaching the right edge
+    if (state === 'playing' && player.x >= MAX_BODY_X - 0.5 && stack.length > 0) {
+      deliverStack();
+    }
+
+    // Age and cull score popups
+    for (let i = popups.length - 1; i >= 0; i--) {
+      popups[i].age += dt;
+      if (popups[i].age >= 1.2) popups.splice(i, 1);
     }
 
     // Spawn
@@ -744,6 +770,8 @@
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText('SCORE ' + score, 10, 18);
+    ctx.textAlign = 'center';
+    ctx.fillText('DELIV ' + deliveries, LW / 2, 18);
     ctx.textAlign = 'right';
     ctx.fillText('TURN ' + turn, LW - 10, 18);
 
@@ -755,12 +783,112 @@
     }
   }
 
+  function drawCustomer() {
+    const x = CUSTOMER_X;
+    const y = PLAYER_FEET;
+
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x - 12, y - 3, 24, 3);
+
+    // Legs (dark pants)
+    ctx.fillStyle = '#3a2418';
+    ctx.fillRect(x - 7, y - 12, 5, 12);
+    ctx.fillRect(x + 2, y - 12, 5, 12);
+    // shoes
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x - 8, y - 3, 7, 3);
+    ctx.fillRect(x + 1, y - 3, 7, 3);
+
+    // Body (warm orange)
+    ctx.fillStyle = '#f4a261';
+    ctx.fillRect(x - 10, y - 32, 20, 20);
+    ctx.fillStyle = '#c47c3a';
+    ctx.fillRect(x + 6, y - 32, 4, 20);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 11, y - 32, 1, 20);
+    ctx.fillRect(x + 10, y - 32, 1, 20);
+    ctx.fillRect(x - 10, y - 12, 20, 1);
+
+    // Head (skin)
+    ctx.fillStyle = '#fdd9a0';
+    ctx.fillRect(x - 9, y - 50, 18, 18);
+    ctx.fillStyle = '#e0bd86';
+    ctx.fillRect(x + 6, y - 50, 3, 18);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 10, y - 50, 1, 18);
+    ctx.fillRect(x + 9, y - 50, 1, 18);
+    ctx.fillRect(x - 9, y - 32, 18, 1);
+
+    // Hair (brown short)
+    ctx.fillStyle = '#5a4421';
+    ctx.fillRect(x - 9, y - 50, 18, 6);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 10, y - 51, 20, 1);
+
+    // Eyes (looking left toward the player)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 5, y - 41, 2, 2);
+    ctx.fillRect(x + 3, y - 41, 2, 2);
+    // mouth (small smile)
+    ctx.fillRect(x - 2, y - 36, 4, 1);
+    // pink cheeks
+    ctx.fillStyle = '#ffb0b0';
+    ctx.fillRect(x - 8, y - 38, 2, 1);
+    ctx.fillRect(x + 6, y - 38, 2, 1);
+
+    // Outstretched left arm + hand reaching toward the player
+    ctx.fillStyle = '#f4a261';  // sleeve
+    ctx.fillRect(x - 14, y - 26, 6, 5);
+    ctx.fillStyle = '#fdd9a0';  // hand
+    ctx.fillRect(x - 19, y - 25, 5, 4);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x - 20, y - 25, 1, 4);
+    ctx.fillRect(x - 19, y - 26, 5, 1);
+    ctx.fillRect(x - 19, y - 21, 5, 1);
+    ctx.fillRect(x - 14, y - 27, 6, 1);
+    ctx.fillRect(x - 14, y - 21, 6, 1);
+  }
+
+  function drawMaxLine() {
+    const y = MAX_LINE_Y;
+    ctx.fillStyle = 'rgba(255,209,102,0.85)';
+    for (let i = 0; i < LW; i += 10) ctx.fillRect(i, y, 6, 2);
+    ctx.font = 'bold 10px "Courier New", monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillText('BONUS LINE', LW - 5, y + 5);
+    ctx.fillStyle = 'rgba(255,224,150,1)';
+    ctx.fillText('BONUS LINE', LW - 6, y + 4);
+  }
+
+  function drawPopups() {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 18px "Courier New", monospace';
+    for (const p of popups) {
+      const t = p.age / 1.2;
+      const alpha = Math.max(0, 1 - t);
+      const offsetY = -t * 50;
+      ctx.fillStyle = `rgba(0,0,0,${alpha * 0.7})`;
+      ctx.fillText(p.text, p.x + 2, p.y + offsetY + 2);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y + offsetY);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function render() {
     drawBg();
+    drawCustomer();
+    drawMaxLine();
     drawPiles();
     drawPlayer(player.x, isInDanger());
     drawStack(player.x + CONE_X_OFFSET);
     drawFalling();
+    drawPopups();
     drawHUD();
   }
 
