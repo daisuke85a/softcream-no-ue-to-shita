@@ -100,9 +100,9 @@
     character:      'assets/character.svg',
     characterPanic: 'assets/character-panic.svg',
     cone:           'assets/cone.svg',
-    scoopBlack:     'assets/scoop-black.svg',
+    scoopBrown:     'assets/scoop-brown.svg',
     scoopWhite:     'assets/scoop-white.svg',
-    scoopRed:       'assets/scoop-red.svg',
+    scoopPink:      'assets/scoop-pink.svg',
   };
   const IMG = {};
   for (const [name, url] of Object.entries(ASSETS)) {
@@ -111,9 +111,9 @@
     IMG[name] = im;
   }
   const SCOOP_IMG_BY_NAME = {
-    black: IMG.scoopBlack,
+    brown: IMG.scoopBrown,
     white: IMG.scoopWhite,
-    red:   IMG.scoopRed,
+    pink:  IMG.scoopPink,
   };
 
   function resize() {
@@ -159,9 +159,9 @@
   const FALL_SPEED_MAX = 350;
 
   const COLORS = [
-    { main: '#1a1a1a', dark: '#000', light: '#444', name: 'black' },
-    { main: '#ffffff', dark: '#cccccc', light: '#ffffff', name: 'white' },
-    { main: '#e63946', dark: '#a8232f', light: '#ff7080', name: 'red' },
+    { main: '#755405', dark: '#403018', light: '#cd9f50', name: 'brown' },
+    { main: '#d8d3cc', dark: '#a8a39c', light: '#ffffff', name: 'white' },
+    { main: '#ffc0c0', dark: '#e89696', light: '#ffe3e3', name: 'pink' },
   ];
 
   let state = 'title';
