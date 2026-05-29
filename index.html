@@ -139,8 +139,8 @@
 
   const GROUND_Y = 590;
   const PIECE_W = 72;             // 5 pieces wide fits LW=360
-  const PIECE_H = 50;             // matches scoop body native aspect (20:14 at PIECE_W=72)
-  const MERGE_GROWTH = 17;        // ~MERGE_GROWTH_old * PIECE_H / PIECE_H_old
+  const PIECE_H = 68;             // matches scoop body native aspect (17:16 at PIECE_W=72)
+  const MERGE_GROWTH = 23;        // ~PIECE_H * 0.34, keeps merge feel relative to a full piece
   const PLAYER_W = 34;            // matches new player sprite native 17 wide at 2px/cell
   const PLAYER_FEET = GROUND_Y;
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
@@ -519,8 +519,8 @@
   // rows above the same 14-row body). To keep the body the same size in both
   // variants, the with-specks render is stretched by 19/14 along Y so the
   // specks sit above the body without compressing it.
-  const SCOOP_NO_SPECKS_ROWS = 14;
-  const SCOOP_WITH_SPECKS_ROWS = 19;
+  const SCOOP_NO_SPECKS_ROWS = 16;
+  const SCOOP_WITH_SPECKS_ROWS = 21;
   const SPECKS_RENDER_RATIO = SCOOP_WITH_SPECKS_ROWS / SCOOP_NO_SPECKS_ROWS;
 
   function drawSwirl(cx, bottomY, color, fullHeight, isTopOfStack) {
