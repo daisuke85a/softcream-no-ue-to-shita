@@ -97,10 +97,12 @@
 
   // Pixel-art SVG assets (faithful re-renders of the reference PNGs)
   const ASSETS = {
-    character: 'assets/character.svg',
-    scoopBlack: 'assets/scoop-black.svg',
-    scoopWhite: 'assets/scoop-white.svg',
-    scoopRed:   'assets/scoop-red.svg',
+    character:      'assets/character.svg',
+    characterPanic: 'assets/character-panic.svg',
+    cone:           'assets/cone.svg',
+    scoopBlack:     'assets/scoop-black.svg',
+    scoopWhite:     'assets/scoop-white.svg',
+    scoopRed:       'assets/scoop-red.svg',
   };
   const IMG = {};
   for (const [name, url] of Object.entries(ASSETS)) {
@@ -533,75 +535,24 @@
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(x - 14, y - 3, 28, 4);
 
-    // Character body — faithful SVG from the reference (18x24 native, scaled to PLAYER_W x HEAD_TOP_DY)
-    const charImg = IMG.character;
+    // Character body — normal or panicked variant. Both SVGs are 18x24 native,
+    // scaled to PLAYER_W x HEAD_TOP_DY in canvas pixels.
+    const charImg = panicked ? IMG.characterPanic : IMG.character;
     if (charImg && charImg.complete && charImg.naturalWidth > 0) {
       const cw = PLAYER_W;
       const ch = HEAD_TOP_DY;
       ctx.drawImage(charImg, Math.round(x - cw / 2), Math.round(y - ch), cw, ch);
     }
 
-    // Panic overlay: sweat drop on the head's right side
-    if (panicked) {
-      ctx.fillStyle = '#5cc8eb';
-      ctx.fillRect(x + 16, y - 52, 3, 5);
-      ctx.fillRect(x + 15, y - 49, 5, 2);
-      ctx.fillStyle = '#a8e0f0';
-      ctx.fillRect(x + 16, y - 52, 1, 2);
-      ctx.fillStyle = '#000';
-      ctx.fillRect(x + 15, y - 53, 5, 1);
-      ctx.fillRect(x + 14, y - 49, 1, 3);
-      ctx.fillRect(x + 20, y - 49, 1, 3);
-      ctx.fillRect(x + 15, y - 47, 5, 1);
+    // Cone placed next to the character, upright. Opening centered at the catch x.
+    const coneImg = IMG.cone;
+    if (coneImg && coneImg.complete && coneImg.naturalWidth > 0) {
+      const coneW = 48;
+      const coneH = 40;
+      const cx = x + CONE_X_OFFSET;
+      const yTop = y - CONE_TOP_OFFSET;
+      ctx.drawImage(coneImg, Math.round(cx - coneW / 2), Math.round(yTop), coneW, coneH);
     }
-
-    // Cone tilted up-right (waffle cone with rim)
-    const slices = [
-      { dx: 11, hw: 3,  dy: 46, h: 5 },
-      { dx: 19, hw: 7,  dy: 51, h: 5 },
-      { dx: 27, hw: 11, dy: 56, h: 5 },
-      { dx: 36, hw: 14, dy: 61, h: 5 },
-      { dx: 44, hw: 18, dy: 66, h: 5 },
-      { dx: 52, hw: 22, dy: 71, h: 5 },
-    ];
-    // body fill
-    ctx.fillStyle = '#d4a76a';
-    for (const s of slices) ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, s.h);
-    // right shading
-    ctx.fillStyle = '#a37e44';
-    for (const s of slices) ctx.fillRect(x + s.dx + s.hw - 4, y - s.dy, 4, s.h);
-    // rim line (top slice top) and waffle separators
-    ctx.fillStyle = '#8a6d3a';
-    for (let i = 0; i < slices.length - 1; i++) {
-      const s = slices[i];
-      ctx.fillRect(x + s.dx - s.hw, y - s.dy, s.hw * 2, 1);
-    }
-    // outline around the cone
-    ctx.fillStyle = '#000';
-    let prevL = null, prevR = null;
-    for (let i = slices.length - 1; i >= 0; i--) {
-      const s = slices[i];
-      const l = x + s.dx - s.hw, r = x + s.dx + s.hw;
-      ctx.fillRect(l, y - s.dy, 1, s.h);
-      ctx.fillRect(r - 1, y - s.dy, 1, s.h);
-      if (i === slices.length - 1) {
-        ctx.fillRect(l, y - s.dy, s.hw * 2, 1); // opening top
-      } else {
-        if (l < prevL) ctx.fillRect(l, y - s.dy + s.h, prevL - l, 1);
-        if (r > prevR) ctx.fillRect(prevR, y - s.dy + s.h, r - prevR, 1);
-      }
-      if (i === 0) ctx.fillRect(l, y - s.dy + s.h - 1, s.hw * 2, 1); // tip bottom
-      prevL = l; prevR = r;
-    }
-
-    // Right hand gripping cone tip
-    ctx.fillStyle = '#fdd9a0';
-    ctx.fillRect(x + 8, y - 44, 9, 6);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + 7, y - 44, 1, 6);
-    ctx.fillRect(x + 17, y - 44, 1, 6);
-    ctx.fillRect(x + 8, y - 45, 9, 1);
-    ctx.fillRect(x + 8, y - 38, 9, 1);
   }
 
   function drawStack(cx) {
