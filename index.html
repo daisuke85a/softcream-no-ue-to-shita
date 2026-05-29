@@ -92,12 +92,15 @@
 
   // Pixel-art SVG assets (faithful re-renders of the reference PNGs)
   const ASSETS = {
-    character:      'assets/character.svg',
-    characterPanic: 'assets/character-panic.svg',
-    cone:           'assets/cone.svg',
-    scoopBrown:     'assets/scoop-brown.svg',
-    scoopWhite:     'assets/scoop-white.svg',
-    scoopPink:      'assets/scoop-pink.svg',
+    character:         'assets/character.svg',
+    characterPanic:    'assets/character-panic.svg',
+    cone:              'assets/cone.svg',
+    scoopBrown:        'assets/scoop-brown.svg',
+    scoopWhite:        'assets/scoop-white.svg',
+    scoopPink:         'assets/scoop-pink.svg',
+    scoopBrownSpecks:  'assets/scoop-brown-specks.svg',
+    scoopWhiteSpecks:  'assets/scoop-white-specks.svg',
+    scoopPinkSpecks:   'assets/scoop-pink-specks.svg',
   };
   const IMG = {};
   for (const [name, url] of Object.entries(ASSETS)) {
@@ -109,6 +112,11 @@
     brown: IMG.scoopBrown,
     white: IMG.scoopWhite,
     pink:  IMG.scoopPink,
+  };
+  const SCOOP_SPECKS_IMG_BY_NAME = {
+    brown: IMG.scoopBrownSpecks,
+    white: IMG.scoopWhiteSpecks,
+    pink:  IMG.scoopPinkSpecks,
   };
 
   function resize() {
@@ -502,28 +510,19 @@
     });
   }
 
-  // Stack pieces with 3+ same-color merges (h >= base + 2 * grow) sparkle
-  // with the little "ちょんちょんちょん" specks from the reference image.
-  const SPARKLE_THRESHOLD = PIECE_H + 2 * MERGE_GROWTH; // 32 + 22 = 54
+  // Stack pieces with 3+ same-color merges (h >= base + 2 * grow) swap to the
+  // "with specks" SVG variant which includes the original top-left dots.
+  const SPECKS_THRESHOLD = PIECE_H + 2 * MERGE_GROWTH; // 32 + 22 = 54
 
   function drawSwirl(cx, bottomY, color, fullHeight) {
-    // Faithful re-render of the reference soft-serve SVG. fullHeight stretches it
-    // vertically for merged or melting pieces.
-    const img = SCOOP_IMG_BY_NAME[color.name];
+    const useSpecks = fullHeight >= SPECKS_THRESHOLD;
+    const img = (useSpecks ? SCOOP_SPECKS_IMG_BY_NAME : SCOOP_IMG_BY_NAME)[color.name];
     const h = Math.max(4, fullHeight);
     const w = PIECE_W;
     const x = Math.round(cx - w / 2);
     const y = Math.round(bottomY - h);
     if (img && img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, x, y, w, Math.round(h));
-    }
-    if (fullHeight >= SPARKLE_THRESHOLD) {
-      ctx.fillStyle = '#181818';
-      // three tiny black specks scattered up-left of the scoop, matching the
-      // reference image's "steam" dots
-      ctx.fillRect(x + 6,  y - 5, 2, 2);
-      ctx.fillRect(x + 14, y - 9, 2, 2);
-      ctx.fillRect(x + 10, y + 1, 2, 2);
     }
   }
 
