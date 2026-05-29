@@ -75,7 +75,8 @@
       PC: ← / → キーでも操作可<br>
       落ちてくるソフトをキャッチ → 積み上げ。<br>
       右端の<strong>お客さん</strong>に渡してスコア！<br>
-      黄色の <strong>BONUS LINE</strong> 以上で渡すと大ボーナス。<br>
+      段数で倍々: 1段=20, 2段=40, 3段=80, ...<br>
+      黄色の <strong>BONUS LINE</strong> 以上で渡すと <strong>さらに倍</strong>。<br>
       渡すたびに落下スピードUP。
     </div>
     <button id="startBtn">スタート</button>
@@ -132,8 +133,7 @@
   const CUSTOMER_X = 340;         // customer's center x
   const MAX_LINE_Y = 300;         // bonus threshold (stack top here-or-above => bonus on delivery)
   const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
-  const DELIVERY_SCORE = 10;
-  const DELIVERY_BONUS = 50;
+  const DELIVERY_BASE = 20;       // 20 * 2^(n-1) per delivered piece count
   const SPEED_INCREMENT = 20;     // fallSpeed gained per delivery
   const FALL_SPEED_MAX = 350;
 
@@ -193,8 +193,12 @@
   }
 
   function deliverStack() {
+    const n = stack.length;
+    // base score doubles per piece: 1 -> 20, 2 -> 40, 3 -> 80, ...
+    const base = DELIVERY_BASE * Math.pow(2, n - 1);
     const wasMaxBonus = stackTopY() <= MAX_LINE_Y;
-    const earned = DELIVERY_SCORE + (wasMaxBonus ? DELIVERY_BONUS : 0);
+    // crossing the bonus line doubles the base again
+    const earned = wasMaxBonus ? base * 2 : base;
     score += earned;
     deliveries++;
     fallSpeed = Math.min(FALL_SPEED_MAX, fallSpeed + SPEED_INCREMENT);
