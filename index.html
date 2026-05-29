@@ -76,7 +76,7 @@
       落ちてくるソフトをキャッチ → 積み上げ。<br>
       右端の<strong>お客さん</strong>に渡してスコア！<br>
       段数で倍々: 1段=20, 2段=40, 3段=80, ...<br>
-      黄色の <strong>BONUS LINE</strong> 以上で渡すと <strong>さらに倍</strong>。<br>
+      黄色の <strong>BONUS LINE</strong> 以上で渡すと <strong>×3</strong>。<br>
       渡すたびに落下スピードUP。
     </div>
     <button id="startBtn">スタート</button>
@@ -197,8 +197,8 @@
     // base score doubles per piece: 1 -> 20, 2 -> 40, 3 -> 80, ...
     const base = DELIVERY_BASE * Math.pow(2, n - 1);
     const wasMaxBonus = stackTopY() <= MAX_LINE_Y;
-    // crossing the bonus line doubles the base again
-    const earned = wasMaxBonus ? base * 2 : base;
+    // crossing the bonus line triples the base
+    const earned = wasMaxBonus ? base * 3 : base;
     score += earned;
     deliveries++;
     fallSpeed = Math.min(FALL_SPEED_MAX, fallSpeed + SPEED_INCREMENT);
