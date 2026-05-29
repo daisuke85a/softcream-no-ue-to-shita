@@ -139,9 +139,9 @@
 
   const GROUND_Y = 590;
   const PIECE_W = 72;             // 5 pieces wide fits LW=360
-  const PIECE_H = 50;             // back to the previous balance
-  const MERGE_GROWTH = 17;        // ~PIECE_H * 0.34
-  const PLAYER_W = 60;            // visual width restored to the previous balance
+  const PIECE_H = 45;             // slightly smaller scoop
+  const MERGE_GROWTH = 15;        // ~PIECE_H * 0.34
+  const PLAYER_W = 51;            // 17 native cells * 3px (square cells, native aspect kept)
   const PLAYER_FEET = GROUND_Y;
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
   const CONE_X_OFFSET = 52;       // cone opening center x (from body center)
@@ -149,13 +149,13 @@
   const MAX_BODY_X = LW - CONE_X_OFFSET - CONE_OPENING_HW; // cone right edge cannot pass LW
   const CATCH_TOL = 36;           // |piece.x - cone.x| < this -> catch (= stack half-width)
   const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
-  const HEAD_TOP_DY = 60;         // head top y (from feet), where hit registers
+  const HEAD_TOP_DY = 90;         // head top y (from feet) — 30 native cells * 3px
   const MIN_SPAWN_X = PLAYER_W / 2 + CONE_X_OFFSET - CATCH_TOL + 4; // keep leftmost pieces catchable
   const COL_W = PIECE_W;
   const N_COLS = Math.ceil(LW / COL_W);
 
   // Delivery / customer / max line
-  const CUSTOMER_X = 340;         // customer's center x
+  const CUSTOMER_X = 333;         // customer's center x (kept inside the canvas)
   const MAX_LINE_Y = 3 * PIECE_H; // bonus threshold: 3 soft-serves below the screen top
   const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
   const DELIVERY_BASE = 20;       // 20 * 2^(n-1) per delivered piece count
@@ -628,11 +628,11 @@
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(x - 14, y - 3, 28, 4);
 
-    // Customer SVG — the previous chibi character art, native 18x24, rendered at 2px/cell
+    // Customer SVG — the previous chibi character art, native 18x24, rendered at 3px/cell
     const img = IMG.customer;
     if (img && img.complete && img.naturalWidth > 0) {
-      const cw = 36;
-      const ch = 48;
+      const cw = 54;
+      const ch = 72;
       ctx.drawImage(img, Math.round(x - cw / 2), Math.round(y - ch), cw, ch);
     }
   }
