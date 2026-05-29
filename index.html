@@ -131,7 +131,7 @@
 
   // Delivery / customer / max line
   const CUSTOMER_X = 340;         // customer's center x
-  const MAX_LINE_Y = 300;         // bonus threshold (stack top here-or-above => bonus on delivery)
+  const MAX_LINE_Y = 3 * PIECE_H; // bonus threshold: 3 soft-serves below the screen top
   const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
   const DELIVERY_BASE = 20;       // 20 * 2^(n-1) per delivered piece count
   const SPEED_INCREMENT = 20;     // fallSpeed gained per delivery
