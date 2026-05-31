@@ -218,7 +218,8 @@
   }
 
   function deliverStack() {
-    const n = stack.length;
+    // total pieces caught (merged same-color groups still count for each catch)
+    const n = stack.reduce((s, p) => s + (p.count || 1), 0);
     // base score doubles per piece: 1 -> 20, 2 -> 40, 3 -> 80, ...
     const base = DELIVERY_BASE * Math.pow(2, n - 1);
     const wasMaxBonus = stackTopY() <= MAX_LINE_Y;
@@ -285,8 +286,9 @@
     const top = stack[stack.length - 1];
     if (top && top.color === piece.color) {
       top.h += MERGE_GROWTH;
+      top.count = (top.count || 1) + 1;
     } else {
-      stack.push({ color: piece.color, h: PIECE_H });
+      stack.push({ color: piece.color, h: PIECE_H, count: 1 });
     }
     score++;
     if (stackTopY() <= TOP_GAMEOVER_Y) gameOver();
