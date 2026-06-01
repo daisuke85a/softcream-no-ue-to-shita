@@ -62,6 +62,44 @@
     letter-spacing: 2px;
   }
   #panel button:active { transform: translateY(2px); }
+  /* Per-delivery score breakdown on the game-over screen */
+  #breakdownWrap { margin: 14px auto 4px; max-width: 300px; }
+  .bd-title { font-size: 14px; color: #d0d0e0; letter-spacing: 1px; margin-bottom: 6px; }
+  .bd-scroll { max-height: 38vh; overflow-y: auto; }
+  #breakdown {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+    color: #e8e8f0;
+  }
+  #breakdown td { padding: 4px 4px; text-align: left; white-space: nowrap; }
+  #breakdown td.num { text-align: right; color: #cfcfe0; font-variant-numeric: tabular-nums; }
+  #breakdown td.pts { text-align: right; color: #ffd166; font-weight: bold; font-variant-numeric: tabular-nums; }
+  #breakdown td .mul { color: #ffd166; font-size: 12px; font-weight: bold; }
+  #breakdown tr.bonus td { color: #ffe6a0; }
+  #breakdown tr.bonus td.pts { color: #ffe6a0; }
+  #breakdown tr.total td {
+    border-top: 2px solid #555; padding-top: 8px;
+    font-size: 18px; font-weight: bold; color: #fff;
+  }
+  #breakdown tr.total td.pts { color: #ffd166; }
+  /* "show score table" link-style button + the table panel */
+  .link-btn {
+    display: inline-block;
+    margin-top: 14px !important;
+    background: none !important;
+    color: #9ad1ff !important;
+    font-size: 14px !important;
+    padding: 6px !important;
+    text-decoration: underline;
+    letter-spacing: 1px !important;
+  }
+  #rules { display: none; text-align: left; }
+  #rules h2 { font-size: 20px; text-align: center; margin-bottom: 16px; letter-spacing: 2px; }
+  #rules .rule { margin: 12px 0; font-size: 14px; line-height: 1.7; color: #e0e0ee; }
+  #rules .rule .rh { color: #ffd166; font-weight: bold; font-size: 15px; }
+  #rules .rule .ex { color: #aab; margin-top: 2px; }
+  #rules .rule .ex b { color: #ffd166; }
 </style>
 </head>
 <body>
@@ -70,11 +108,34 @@
   <div id="panel">
     <h1 id="title">ソフトクリーム屋さん</h1>
     <div class="score" id="scoreLabel" style="display:none">スコア: <span id="finalScore">0</span></div>
+    <div id="breakdownWrap" style="display:none">
+      <div class="bd-title">お届けの記録</div>
+      <div class="bd-scroll"><table id="breakdown"></table></div>
+    </div>
     <div class="hint" id="hint">
       落ちてくるソフトクリームをキャッチして、<br>
       お客さんに渡そう。
     </div>
     <button id="startBtn">スタート</button>
+    <br>
+    <button id="rulesBtn" class="link-btn">スコア表を見る</button>
+    <div id="rules">
+      <h2>スコアの しくみ</h2>
+      <div class="rule">
+        <div class="rh">🚶 お届けで 点が入る</div>
+        <div>落ちてくるソフトをキャッチして<br>お客さんに渡すと点になります。<br>重ねた数が多いほど点が倍々に！</div>
+        <div class="ex">
+          1個 → <b>+20</b>　2個 → <b>+40</b><br>
+          3個 → <b>+80</b>　4個 → <b>+160</b><br>
+          （20 を 1個ごとに2倍）
+        </div>
+      </div>
+      <div class="rule">
+        <div class="rh">⭐ ボーナスライン</div>
+        <div>ボーナスラインを超える高さまで<br>重ねてお届けすると、点数が <b style="color:#ffd166">3倍</b>！</div>
+      </div>
+      <button id="rulesCloseBtn" class="link-btn">とじる</button>
+    </div>
   </div>
 </div>
 <script>
@@ -87,6 +148,11 @@
   const hintEl = document.getElementById('hint');
   const scoreLabel = document.getElementById('scoreLabel');
   const finalScore = document.getElementById('finalScore');
+  const breakdownEl = document.getElementById('breakdown');
+  const breakdownWrap = document.getElementById('breakdownWrap');
+  const rulesEl = document.getElementById('rules');
+  const rulesBtn = document.getElementById('rulesBtn');
+  const rulesCloseBtn = document.getElementById('rulesCloseBtn');
 
   const LW = 360, LH = 640;
 
@@ -169,7 +235,7 @@
   ];
 
   let state = 'title';
-  let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs, deliveries, popups;
+  let player, stack, falling, piles, spawnTimer, spawnInterval, fallSpeed, turn, score, lastTs, deliveries, popups, stats;
   let pointerDir = 0;        // -1 / 0 / +1, computed each frame from target vs player.x
   let pointerDown = false;
   let pointerTargetX = null; // last touched x; player walks toward this and stops
@@ -188,6 +254,10 @@
     score = 0;
     deliveries = 0;
     popups = []; // [{x, y, text, age, color}]
+    // Per-delivery log for the game-over breakdown.
+    // Each entry: { n: pieces handed over, base, earned, bonus }.
+    // Sum of earned across the log always equals score.
+    stats = { deliveries: [] };
   }
 
   function clearInput() {
@@ -201,6 +271,7 @@
   function startGame() {
     reset();
     clearInput();
+    hideRules();
     state = 'playing';
     overlay.classList.remove('show');
     lastTs = performance.now();
@@ -212,9 +283,55 @@
     titleEl.textContent = 'ゲームオーバー';
     scoreLabel.style.display = 'block';
     finalScore.textContent = score;
-    hintEl.innerHTML = `お客さんに ${deliveries} 回お渡しできました。`;
+    breakdownEl.innerHTML = buildBreakdownRows();
+    breakdownWrap.style.display = 'block';
+    hintEl.style.display = 'none';
     startBtn.textContent = 'もう一度';
     overlay.classList.add('show');
+  }
+
+  function buildBreakdownRows() {
+    const log = stats.deliveries;
+    if (log.length === 0) {
+      return `<tr><td colspan="3" style="text-align:center;color:#aab;padding:10px 0">` +
+             `お届けできませんでした…</td></tr>`;
+    }
+    let html = '';
+    log.forEach((d, i) => {
+      const cls = d.bonus ? ' class="bonus"' : '';
+      // middle column: pieces, plus a "×3倍" marker for bonus deliveries
+      const mid = d.bonus
+        ? `${d.n}個 <span class="mul">⭐${d.base}×3</span>`
+        : `${d.n}個`;
+      html += `<tr${cls}>` +
+              `<td>${i + 1}回目</td>` +
+              `<td class="num">${mid}</td>` +
+              `<td class="pts">+${d.earned}</td></tr>`;
+    });
+    html += `<tr class="total"><td>合計</td><td class="num"></td><td class="pts">${score}</td></tr>`;
+    return html;
+  }
+
+  function showRules() {
+    // Hide the live game-over content while the score table is open
+    scoreLabel.dataset.prev = scoreLabel.style.display;
+    breakdownWrap.dataset.prev = breakdownWrap.style.display;
+    hintEl.dataset.prev = hintEl.style.display;
+    scoreLabel.style.display = 'none';
+    breakdownWrap.style.display = 'none';
+    hintEl.style.display = 'none';
+    startBtn.style.display = 'none';
+    rulesBtn.style.display = 'none';
+    rulesEl.style.display = 'block';
+  }
+
+  function hideRules() {
+    rulesEl.style.display = 'none';
+    scoreLabel.style.display = scoreLabel.dataset.prev || 'none';
+    breakdownWrap.style.display = breakdownWrap.dataset.prev || 'none';
+    hintEl.style.display = hintEl.dataset.prev || '';
+    startBtn.style.display = '';
+    rulesBtn.style.display = '';
   }
 
   function deliverStack() {
@@ -227,6 +344,7 @@
     const earned = wasMaxBonus ? base * 3 : base;
     score += earned;
     deliveries++;
+    stats.deliveries.push({ n, base, earned, bonus: wasMaxBonus });
     fallSpeed = Math.min(FALL_SPEED_MAX, fallSpeed + SPEED_INCREMENT);
     stack = [];
     addPopup(CUSTOMER_X - 30, PLAYER_FEET - 70,
@@ -252,7 +370,7 @@
     // age and melt
     Object.keys(piles).forEach(c => {
       piles[c].forEach(p => p.age++);
-      piles[c] = piles[c].filter(p => p.age < 3);
+      piles[c] = piles[c].filter(p => p.age < 2);
       if (piles[c].length === 0) delete piles[c];
     });
 
@@ -290,7 +408,6 @@
     } else {
       stack.push({ color: piece.color, h: PIECE_H, count: 1 });
     }
-    score++;
     if (stackTopY() <= TOP_GAMEOVER_Y) gameOver();
   }
 
@@ -388,6 +505,8 @@
   window.addEventListener('blur', clearInput);
 
   startBtn.addEventListener('click', startGame);
+  rulesBtn.addEventListener('click', showRules);
+  rulesCloseBtn.addEventListener('click', hideRules);
 
   // Update
   function update(dt) {
@@ -540,7 +659,7 @@
 
   function drawMelt(cx, bottomY, color, age) {
     // Melting puddle look — flatter, drippy
-    const alpha = age >= 2 ? 0.6 : 1.0;
+    const alpha = age >= 1 ? 0.6 : 1.0;
     ctx.globalAlpha = alpha;
     drawSwirl(cx, bottomY, color, PIECE_H - age * 4);
     ctx.globalAlpha = 1;
