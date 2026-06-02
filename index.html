@@ -203,6 +203,13 @@
   window.addEventListener('resize', resize);
   resize();
 
+  // Play-area frame (the graph-paper box). It bounds where everything lives:
+  // player movement, piece spawn range, and the customer all stay inside it.
+  const FRAME_L = 12;
+  const FRAME_R = 348;
+  const FRAME_T = 40;
+  const FRAME_B = 596;
+
   const GROUND_Y = 590;
   const PIECE_W = 72;             // 5 pieces wide fits LW=360
   const PIECE_H = 40;             // smaller scoop for a cuter feel
@@ -212,16 +219,17 @@
   const CONE_TOP_OFFSET = 71;     // opening top y (from feet)
   const CONE_X_OFFSET = 52;       // cone opening center x (from body center)
   const CONE_OPENING_HW = 22;     // cone opening half-width (= widest slice in drawPlayer)
-  const MAX_BODY_X = LW - CONE_X_OFFSET - CONE_OPENING_HW; // cone right edge cannot pass LW
+  const PLAYER_MIN_X = FRAME_L + PLAYER_W / 2;             // body left edge stays inside the frame
+  const MAX_BODY_X = FRAME_R - CONE_X_OFFSET - CONE_OPENING_HW; // cone right edge cannot pass the frame
   const CATCH_TOL = 36;           // |piece.x - cone.x| < this -> catch (= stack half-width)
   const HIT_TOL = 25;             // |piece.x - body.x| < this -> game over
   const HEAD_TOP_DY = 90;         // head top y (from feet) — 30 native cells * 3px
-  const MIN_SPAWN_X = PLAYER_W / 2 + CONE_X_OFFSET - CATCH_TOL + 4; // keep leftmost pieces catchable
+  const MIN_SPAWN_X = PLAYER_MIN_X + CONE_X_OFFSET - CATCH_TOL + 4; // keep leftmost pieces catchable
   const COL_W = PIECE_W;
   const N_COLS = Math.ceil(LW / COL_W);
 
   // Delivery / customer / max line
-  const CUSTOMER_X = 333;         // customer's center x (kept inside the canvas)
+  const CUSTOMER_X = 320;         // customer's center x (kept inside the frame, by the right edge)
   const MAX_LINE_Y = 3 * PIECE_H; // bonus threshold: 3 soft-serves below the screen top
   const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
   const DELIVERY_BASE = 20;       // 20 * 2^(n-1) per delivered piece count
@@ -375,7 +383,7 @@
     });
 
     const spawnMin = MIN_SPAWN_X;
-    const spawnMax = LW - PIECE_W / 2;
+    const spawnMax = FRAME_R - PIECE_W / 2;
     const x = spawnMin + Math.random() * (spawnMax - spawnMin);
     falling.push({
       x, y: -PIECE_H,
@@ -430,7 +438,7 @@
 
   function constrainPlayerTo(x) {
     // Pile-based: contiguous free-column range around the player's current column.
-    let nx = Math.max(PLAYER_W / 2, Math.min(MAX_BODY_X, x));
+    let nx = Math.max(PLAYER_MIN_X, Math.min(MAX_BODY_X, x));
     const blocked = c => piles[c] && piles[c].length > 0;
     const playerCol = colOfX(player.x);
     let leftCol = playerCol;
@@ -603,33 +611,43 @@
   }
 
   // Drawing
+  const GRID_CELL = 10;
+
   function drawBg() {
-    const g = ctx.createLinearGradient(0, 0, 0, LH);
-    g.addColorStop(0, '#5ec6ea');
-    g.addColorStop(0.65, '#b8e0f0');
-    g.addColorStop(0.7, '#ffd89b');
-    g.addColorStop(1, '#e8a25b');
-    ctx.fillStyle = g;
+    // Paper-cream backdrop (the margin outside the frame)
+    ctx.fillStyle = '#fbf3ee';
     ctx.fillRect(0, 0, LW, LH);
 
-    // pixel clouds
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    drawCloud(60, 90);
-    drawCloud(260, 140);
-    drawCloud(160, 60);
+    const fw = FRAME_R - FRAME_L, fh = FRAME_B - FRAME_T;
 
-    // ground line
-    ctx.fillStyle = '#d18a4b';
-    ctx.fillRect(0, GROUND_Y, LW, LH - GROUND_Y);
-    ctx.fillStyle = '#a86838';
-    ctx.fillRect(0, GROUND_Y, LW, 4);
-  }
+    // Pink graph-paper grid, clipped to the frame box
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(FRAME_L, FRAME_T, fw, fh);
+    ctx.clip();
+    ctx.fillStyle = '#fdeef1';
+    ctx.fillRect(FRAME_L, FRAME_T, fw, fh);
+    ctx.strokeStyle = 'rgba(228,150,168,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = FRAME_L; x <= FRAME_R; x += GRID_CELL) {
+      ctx.moveTo(x + 0.5, FRAME_T);
+      ctx.lineTo(x + 0.5, FRAME_B);
+    }
+    for (let y = FRAME_T; y <= FRAME_B; y += GRID_CELL) {
+      ctx.moveTo(FRAME_L, y + 0.5);
+      ctx.lineTo(FRAME_R, y + 0.5);
+    }
+    ctx.stroke();
+    ctx.restore();
 
-  function drawCloud(x, y) {
-    const px = 4;
-    [[0,0],[1,0],[2,0],[3,0],[-1,-1],[0,-1],[1,-1],[2,-1],[3,-1],[4,-1],[0,1],[1,1],[2,1],[3,1]].forEach(([a,b]) => {
-      ctx.fillRect(x + a * px, y + b * px, px, px);
-    });
+    // Frame border — bold outer line plus a faint inner line
+    ctx.strokeStyle = '#5a4650';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(FRAME_L + 1, FRAME_T + 1, fw - 2, fh - 2);
+    ctx.strokeStyle = 'rgba(90,70,80,0.45)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(FRAME_L + 4.5, FRAME_T + 4.5, fw - 9, fh - 9);
   }
 
   // Stack pieces with 3+ same-color merges (h >= base + 2 * grow) swap to the
@@ -720,25 +738,16 @@
   }
 
   function drawHUD() {
-    // Top bar
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(0, 0, LW, 36);
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px "Courier New", monospace';
+    // Stats in the paper margin above the frame — dark ink on cream
+    ctx.fillStyle = '#5a4650';
+    ctx.font = 'bold 16px "Courier New", monospace';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillText('SCORE ' + score, 10, 18);
+    ctx.fillText('SCORE ' + score, FRAME_L + 2, 20);
     ctx.textAlign = 'center';
-    ctx.fillText('DELIV ' + deliveries, LW / 2, 18);
+    ctx.fillText('DELIV ' + deliveries, LW / 2, 20);
     ctx.textAlign = 'right';
-    ctx.fillText('TURN ' + turn, LW - 10, 18);
-
-    // Danger line indicator
-    const dangerY = 36;
-    ctx.fillStyle = 'rgba(230,57,70,0.7)';
-    for (let i = 0; i < LW; i += 8) {
-      ctx.fillRect(i, dangerY, 4, 2);
-    }
+    ctx.fillText('TURN ' + turn, FRAME_R - 2, 20);
   }
 
   function drawCustomer() {
@@ -760,15 +769,15 @@
 
   function drawMaxLine() {
     const y = MAX_LINE_Y;
-    ctx.fillStyle = 'rgba(255,209,102,0.85)';
-    for (let i = 0; i < LW; i += 10) ctx.fillRect(i, y, 6, 2);
+    ctx.fillStyle = 'rgba(240,140,60,0.85)';
+    for (let i = FRAME_L; i < FRAME_R; i += 10) ctx.fillRect(i, y, 6, 2);
     ctx.font = 'bold 10px "Courier New", monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillText('BONUS LINE', LW - 5, y + 5);
-    ctx.fillStyle = 'rgba(255,224,150,1)';
-    ctx.fillText('BONUS LINE', LW - 6, y + 4);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText('BONUS LINE', FRAME_R - 5, y + 5);
+    ctx.fillStyle = 'rgba(230,120,40,1)';
+    ctx.fillText('BONUS LINE', FRAME_R - 6, y + 4);
   }
 
   function drawPopups() {
