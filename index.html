@@ -62,6 +62,17 @@
     letter-spacing: 2px;
   }
   #panel button:active { transform: translateY(2px); }
+  /* Title screen: let the canvas how-to-play show; dock controls at the bottom */
+  #overlay.title-mode { background: rgba(20,16,24,0.12); align-items: flex-end; }
+  #overlay.title-mode #panel {
+    width: 92%; max-width: 360px;
+    margin-bottom: 48vh;
+    padding: 12px 18px 16px;
+    background: rgba(42,42,62,0.92);
+  }
+  #overlay.title-mode #panel h1,
+  #overlay.title-mode #panel .hint { display: none; }
+  #overlay.title-mode #panel button#startBtn { margin-top: 4px; }
   /* Per-delivery score breakdown on the game-over screen */
   #breakdownWrap { margin: 14px auto 4px; max-width: 300px; }
   .bd-title { font-size: 14px; color: #d0d0e0; letter-spacing: 1px; margin-bottom: 6px; }
@@ -104,7 +115,7 @@
 </head>
 <body>
 <div id="wrap"><canvas id="game"></canvas></div>
-<div id="overlay" class="show">
+<div id="overlay" class="show title-mode">
   <div id="panel">
     <h1 id="title">ソフトクリーム屋さん</h1>
     <div class="score" id="scoreLabel" style="display:none">スコア: <span id="finalScore">0</span></div>
@@ -172,6 +183,8 @@
   const IMG = {};
   for (const [name, url] of Object.entries(ASSETS)) {
     const im = new Image();
+    // Re-render the title guide as sprites arrive (they load asynchronously).
+    im.onload = () => { if (state === 'title') render(); };
     im.src = url;
     IMG[name] = im;
   }
@@ -230,6 +243,7 @@
 
   // Delivery / customer / max line
   const CUSTOMER_X = 320;         // customer's center x (kept inside the frame, by the right edge)
+  const GUIDE_PLAYER_X = 72;      // where the player stands in the title-screen how-to-play
   const MAX_LINE_Y = 3 * PIECE_H; // bonus threshold: 3 soft-serves below the screen top
   const TOP_GAMEOVER_Y = 8;       // absolute ceiling (stack top here => game over)
   const DELIVERY_BASE = 20;       // 20 * 2^(n-1) per delivered piece count
@@ -281,7 +295,7 @@
     clearInput();
     hideRules();
     state = 'playing';
-    overlay.classList.remove('show');
+    overlay.classList.remove('show', 'title-mode');
     lastTs = performance.now();
     requestAnimationFrame(loop);
   }
@@ -797,11 +811,108 @@
     }
   }
 
+  function roundRectPath(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // A small speech-pill label with dark text on white, used by the how-to-play.
+  // align: 'left' | 'center' | 'right' positions the box around x.
+  function guideLabel(text, x, y, align) {
+    const lines = text.split('\n');
+    ctx.font = 'bold 12px "Courier New","ヒラギノ角ゴ ProN",monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    const padX = 7, padY = 5, lh = 15;
+    let tw = 0;
+    for (const ln of lines) tw = Math.max(tw, ctx.measureText(ln).width);
+    const boxW = tw + padX * 2, boxH = lines.length * lh + padY * 2;
+    let bx = x;
+    if (align === 'center') bx = x - boxW / 2;
+    else if (align === 'right') bx = x - boxW;
+    roundRectPath(bx, y, boxW, boxH, 7);
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(220,110,135,0.9)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#b13a55';
+    lines.forEach((ln, i) => ctx.fillText(ln, bx + padX, y + padY + i * lh));
+    return { x: bx, y, w: boxW, h: boxH };
+  }
+
+  // A thin connector with a small arrowhead, from a label toward its target.
+  function guideArrow(x1, y1, x2, y2) {
+    ctx.strokeStyle = 'rgba(177,58,85,0.9)';
+    ctx.fillStyle = 'rgba(177,58,85,0.9)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    const a = Math.atan2(y2 - y1, x2 - x1), s = 7;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - s * Math.cos(a - 0.5), y2 - s * Math.sin(a - 0.5));
+    ctx.lineTo(x2 - s * Math.cos(a + 0.5), y2 - s * Math.sin(a + 0.5));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawGuide() {
+    // Game title in the top paper margin
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 19px "Courier New","ヒラギノ角ゴ ProN",monospace';
+    ctx.fillStyle = '#b13a55';
+    ctx.fillText('ソフトクリーム屋さん', LW / 2, 22);
+
+    // A sample 2-scoop stack carried in the player's cone
+    const coneCx = GUIDE_PLAYER_X + CONE_X_OFFSET;
+    drawSwirl(coneCx, PLAYER_FEET - CONE_TOP_OFFSET, COLORS[0], PIECE_H, false);
+    drawSwirl(coneCx, PLAYER_FEET - CONE_TOP_OFFSET - PIECE_H, COLORS[1], PIECE_H, true);
+
+    // A sample soft-serve falling from above
+    const fx = 200, fy = 150;
+    drawSwirl(fx, fy + PIECE_H / 2, COLORS[2], PIECE_H);
+
+    // A soft-serve right above the player's head — the thing to avoid
+    drawSwirl(GUIDE_PLAYER_X, PLAYER_FEET - HEAD_TOP_DY - 10, COLORS[0], PIECE_H);
+
+    // A soft-serve fallen and melting on the ground
+    drawMelt(210, GROUND_Y, COLORS[2], 1);
+
+    // 1) Catch the falling soft-serve with the cone
+    guideArrow(fx, 96, fx, fy - PIECE_H / 2 - 2);
+    guideLabel('おちてくる ソフトを\nコーンで キャッチ！', fx, 62, 'center');
+
+    // 2) Cross the bonus line for bonus points
+    guideLabel('ここを こえて\nとどけると ボーナス✨', FRAME_L + 8, MAX_LINE_Y + 7, 'left');
+
+    // 3) Don't let one land on your head (milder than the reference)
+    guideArrow(GUIDE_PLAYER_X, 436, GUIDE_PLAYER_X, PLAYER_FEET - HEAD_TOP_DY - PIECE_H - 2);
+    guideLabel('あたまに のったら\nおしまい💦', GUIDE_PLAYER_X + 4, 392, 'center');
+
+    // 4) Carry it to the customer to deliver
+    guideArrow(282, 478, CUSTOMER_X - 6, PLAYER_FEET - 66);
+    guideLabel('おきゃくさんに\nはこんで わたそう', 268, 436, 'center');
+  }
+
   function render() {
     drawBg();
-    drawCustomer();
     drawMaxLine();
+    drawCustomer();
     drawPiles();
+    if (state === 'title') {
+      drawPlayer(GUIDE_PLAYER_X, false);
+      drawGuide();
+      return;
+    }
     drawPlayer(player.x, isInDanger());
     drawStack(player.x + CONE_X_OFFSET);
     drawFalling();
